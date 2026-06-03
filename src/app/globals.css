@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --background: 210 24% 96%;
+  --foreground: 220 28% 10%;
+  --surface: 0 0% 100%;
+  --elevated: 210 24% 99%;
+  --glass: 0 0% 100%;
+  --muted: 214 30% 92%;
+  --muted-foreground: 220 10% 42%;
+  --border: 220 20% 84%;
+  --primary: 211 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 168 76% 42%;
+  --accent-foreground: 0 0% 100%;
+  --danger: 0 72% 51%;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 220 20% 7%;
+  --foreground: 210 22% 92%;
+  --surface: 220 17% 10%;
+  --elevated: 220 16% 13%;
+  --glass: 220 18% 14%;
+  --muted: 220 14% 18%;
+  --muted-foreground: 215 13% 66%;
+  --border: 220 12% 24%;
+  --primary: 211 100% 57%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 166 84% 48%;
+  --accent-foreground: 220 30% 6%;
+  --danger: 0 84% 63%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(0, 122, 255, 0.14), transparent 28rem),
+    radial-gradient(circle at 92% 2%, rgba(52, 199, 89, 0.12), transparent 22rem),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.focus-ring {
+  @apply outline-none ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-primary;
+}
+
+.glass-surface {
+  background: color-mix(in srgb, hsl(var(--glass)) 78%, transparent);
+  border-color: color-mix(in srgb, hsl(var(--border)) 68%, transparent);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+}
+
+@supports not (background: color-mix(in srgb, white, transparent)) {
+  .glass-surface {
+    background: hsla(var(--glass), 0.9);
+  }
+}

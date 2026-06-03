@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  editor
+  viewer
+}
+
+enum UserStatus {
+  active
+  invited
+  disabled
+}
+
+enum AuditAction {
+  license_create
+  license_update
+  license_delete
+  credential_create
+  credential_reveal
+  credential_update
+  import_confirm
+  notification_send
+  settings_update
+  user_update
+}
+
+enum NotificationKind {
+  created
+  manual
+  expiry_reminder
+}
+
+enum NotificationStatus {
+  pending
+  sent
+  failed
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String        @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          Role          @default(viewer)
+  status        UserStatus    @default(invited)
+  accounts      Account[]
+  sessions      Session[]
+  licenses      License[]     @relation("LicenseCreator")
+  auditLogs     AuditLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model License {
+  id                String                      @id @default(cuid())
+  status            String?
+  serviceType       String?
+  details           String?
+  branch            String?
+  vendor            String?
+  usersCount        Int?
+  ownerAccount      String?
+  admins            String?
+  startDate         DateTime?
+  expiryDate        DateTime?
+  paymentMethod     String?
+  renewalFrequency  String?
+  costEgp           Decimal?                    @db.Decimal(12, 2)
+  costUsd           Decimal?                    @db.Decimal(12, 2)
+  monthlyCostEgp    Decimal?                    @db.Decimal(12, 2)
+  yearlyCostEgp     Decimal?                    @db.Decimal(12, 2)
+  fiveYearsCostEgp  Decimal?                    @db.Decimal(12, 2)
+  monthlyCostUsd    Decimal?                    @db.Decimal(12, 2)
+  yearlyCostUsd     Decimal?                    @db.Decimal(12, 2)
+  fiveYearsCostUsd  Decimal?                    @db.Decimal(12, 2)
+  notes             String?                     @db.Text
+  createdById       String?
+  createdBy         User?                       @relation("LicenseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  encryptedData     LicenseEncryptedData?
+  adminAssignments  LicenseAdminAssignment[]
+  credentials       CredentialSecret[]
+  notificationTargets LicenseNotificationTarget[]
+  histories         NotificationHistory[]
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+}
+
+model LicenseEncryptedData {
+  id        String   @id @default(cuid())
+  licenseId String   @unique
+  cipher    String   @db.Text
+  iv        String
+  tag       String
+  license   License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+}
+
+model LicenseAdmin {
+  id          String                    @id @default(cuid())
+  name        String                    @unique
+  active      Boolean                   @default(true)
+  assignments LicenseAdminAssignment[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model LicenseAdminAssignment {
+  id        String       @id @default(cuid())
+  licenseId String
+  adminId   String
+  license   License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  admin     LicenseAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseId, adminId])
+}
+
+model CredentialSecret {
+  id             String   @id @default(cuid())
+  licenseId      String
+  label          String
+  usernameCipher String?  @db.Text
+  usernameIv     String?
+  usernameTag    String?
+  passwordCipher String   @db.Text
+  passwordIv     String
+  passwordTag    String
+  license        License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model LookupValue {
+  id        String   @id @default(cuid())
+  category  String
+  value     String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, value])
+}
+
+model EmailRecipient {
+  id        String             @id @default(cuid())
+  name      String
+  email     String             @unique
+  active    Boolean            @default(true)
+  groups    EmailGroupMember[]
+  targets   LicenseNotificationTarget[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model EmailGroup {
+  id        String             @id @default(cuid())
+  name      String             @unique
+  active    Boolean            @default(true)
+  members   EmailGroupMember[]
+  targets   LicenseNotificationTarget[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model EmailGroupMember {
+  id          String         @id @default(cuid())
+  groupId     String
+  recipientId String
+  group       EmailGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  recipient   EmailRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, recipientId])
+}
+
+model LicenseNotificationTarget {
+  id          String          @id @default(cuid())
+  licenseId   String
+  recipientId String?
+  groupId     String?
+  license     License         @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  recipient   EmailRecipient? @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  group       EmailGroup?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseId, recipientId])
+  @@unique([licenseId, groupId])
+}
+
+model ReminderConfig {
+  id          String   @id @default(cuid())
+  daysBefore  Int
+  sendHour    Int      @default(9)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([daysBefore])
+}
+
+model NotificationHistory {
+  id           String             @id @default(cuid())
+  licenseId    String
+  kind         NotificationKind
+  status       NotificationStatus @default(pending)
+  recipient    String
+  subject      String
+  errorMessage String?            @db.Text
+  sentAt       DateTime?
+  license      License            @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+}
+
+model InAppNotification {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  metadata  Json?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
+}
+
+model SmtpSettings {
+  id             String   @id @default("default")
+  host           String?
+  port           Int      @default(587)
+  secure         Boolean  @default(false)
+  username       String?
+  passwordCipher String?  @db.Text
+  passwordIv     String?
+  passwordTag    String?
+  fromName       String?
+  fromEmail      String?
+  updatedAt      DateTime @updatedAt
+}
+
+model ImportBatch {
+  id          String   @id @default(cuid())
+  filename    String
+  rowCount    Int
+  rawRows     Json
+  createdById String?
+  createdAt   DateTime @default(now())
+}
