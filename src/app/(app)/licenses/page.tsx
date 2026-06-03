@@ -1,20 +1,27 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 
+import { LicenseSearchToolbar } from "@/components/license-search-toolbar";
 import { LinkButton, Panel, StatusPill } from "@/components/ui";
 import { decryptLicense } from "@/lib/license-secure";
+import { getLicenseFormOptions } from "@/lib/lookups";
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatMoney } from "@/lib/utils";
 
-type Props = { searchParams: Promise<{ q?: string }> };
+type Props = { searchParams: Promise<{ q?: string; status?: string; serviceType?: string; branch?: string; adminId?: string; page?: string; pageSize?: string }> };
 
 export default async function LicensesPage({ searchParams }: Props) {
   const params = await searchParams;
   const query = params.q?.trim();
-  const licenseRows = await prisma.license.findMany({
-    orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }],
-    include: { encryptedData: true, adminAssignments: { include: { admin: true } } }
-  });
+  const page = Math.max(1, Number(params.page ?? 1) || 1);
+  const pageSize = Math.min(50, Math.max(10, Number(params.pageSize ?? 10) || 10));
+  const [licenseRows, formOptions] = await Promise.all([
+    prisma.license.findMany({
+      orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }],
+      include: { encryptedData: true, adminAssignments: { include: { admin: true } } }
+    }),
+    getLicenseFormOptions()
+  ]);
   const licenses = licenseRows.map(decryptLicense);
   const filtered = query
     ? licenses.filter((license) =>
@@ -23,6 +30,16 @@ export default async function LicensesPage({ searchParams }: Props) {
           .some((value) => value?.toLowerCase().includes(query.toLowerCase()))
       )
     : licenses;
+  const advancedFiltered = filtered.filter((license) => {
+    const matchesStatus = !params.status || license.status === params.status;
+    const matchesService = !params.serviceType || license.serviceType === params.serviceType;
+    const matchesBranch = !params.branch || license.branch === params.branch;
+    const matchesAdmin = !params.adminId || license.adminIds.includes(params.adminId);
+    return matchesStatus && matchesService && matchesBranch && matchesAdmin;
+  });
+  const pageCount = Math.max(1, Math.ceil(advancedFiltered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const paged = advancedFiltered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="grid gap-6">
@@ -37,14 +54,13 @@ export default async function LicensesPage({ searchParams }: Props) {
         </LinkButton>
       </div>
       <Panel>
-        <form className="mb-4">
-          <input
-            name="q"
-            defaultValue={query}
-            placeholder="Search licenses"
-            className="focus-ring h-10 w-full max-w-md rounded-md border border-border bg-elevated px-3 text-sm placeholder:text-muted-foreground"
-          />
-        </form>
+        <LicenseSearchToolbar
+          lookupOptions={formOptions.lookupOptions}
+          adminOptions={formOptions.admins}
+          page={currentPage}
+          pageCount={pageCount}
+          total={advancedFiltered.length}
+        />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="text-muted-foreground">
@@ -61,7 +77,7 @@ export default async function LicensesPage({ searchParams }: Props) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((license) => (
+              {paged.map((license) => (
                 <tr key={license.id} className="border-t border-border">
                   <td className="py-3 font-medium">
                     <Link href={`/licenses/${license.id}`} className="text-primary hover:underline">

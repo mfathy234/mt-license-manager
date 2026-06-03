@@ -35,3 +35,45 @@ Authorization: Bearer <CRON_SECRET>
 ```
 
 The included GitHub Actions workflow can call the endpoint on a schedule after `APP_URL` and `CRON_SECRET` are configured as repository secrets.
+
+## Deploy As Is
+
+Do not commit `.env` to GitHub. Add these values as GitHub repository secrets, then run the Azure deploy workflow:
+
+- `DATABASE_URL`
+- `NEXTAUTH_SECRET`
+- `CREDENTIAL_ENCRYPTION_KEY`
+- `CRON_SECRET`
+- `AZURE_APP_NAME`
+- `AZURE_WEBAPP_PUBLISH_PROFILE`
+- `APP_URL`
+
+In Azure App Service, add the same runtime app settings:
+
+- `DATABASE_URL`
+- `NEXTAUTH_URL=https://your-app.azurewebsites.net`
+- `NEXTAUTH_SECRET`
+- `CREDENTIAL_ENCRYPTION_KEY`
+- `CRON_SECRET`
+
+Then in GitHub:
+
+1. Open the repository.
+2. Go to Settings, Secrets and variables, Actions.
+3. Add the secrets above.
+4. Go to Actions.
+5. Run `Deploy Azure App Service`.
+
+The deploy workflow runs:
+
+```powershell
+npm ci
+npm run prisma:deploy
+npm run build
+```
+
+For existing data after first deploy, run this locally or as a one-time Azure console command:
+
+```powershell
+npm run data:migrate-licenses
+```

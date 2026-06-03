@@ -5,6 +5,7 @@ import { CalendarDays, Save } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ModernMultiSelect, ModernSelect } from "@/components/modern-select";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -49,13 +50,13 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
   return (
     <form onSubmit={submit} className="grid gap-5 lg:grid-cols-2">
       <FloatingInput label="Details" name="details" defaultValue={value("details")} required />
-      <FloatingSelect label="Status" name="status" defaultValue={value("status")} options={lookupOptions.status} />
-      <FloatingSelect label="Service type" name="serviceType" defaultValue={value("serviceType")} options={lookupOptions.serviceType} />
-      <FloatingSelect label="Branch" name="branch" defaultValue={value("branch")} options={lookupOptions.branch} />
+      <ModernSelect label="Status" name="status" value={value("status")} options={toSelectOptions(lookupOptions.status)} />
+      <ModernSelect label="Service type" name="serviceType" value={value("serviceType")} options={toSelectOptions(lookupOptions.serviceType)} />
+      <ModernSelect label="Branch" name="branch" value={value("branch")} options={toSelectOptions(lookupOptions.branch)} />
       <FloatingInput label="Vendor" name="vendor" defaultValue={value("vendor")} />
       <FloatingInput label="Users count" name="usersCount" type="number" min="0" defaultValue={value("usersCount")} />
       <FloatingInput label="Owner account" name="ownerAccount" defaultValue={value("ownerAccount")} />
-      <FloatingMultiSelect
+      <ModernMultiSelect
         label="Admins"
         name="adminIds"
         options={adminOptions.map((admin) => ({ value: admin.id, label: admin.name }))}
@@ -63,8 +64,8 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
       />
       <FloatingDatePicker label="Start date" name="startDate" initialValue={value("startDate")} />
       <FloatingDatePicker label="Expiry date" name="expiryDate" initialValue={value("expiryDate")} />
-      <FloatingSelect label="Payment method" name="paymentMethod" defaultValue={value("paymentMethod")} options={lookupOptions.paymentMethod} />
-      <FloatingSelect label="Renewal frequency" name="renewalFrequency" defaultValue={value("renewalFrequency")} options={lookupOptions.renewalFrequency} />
+      <ModernSelect label="Payment method" name="paymentMethod" value={value("paymentMethod")} options={toSelectOptions(lookupOptions.paymentMethod)} />
+      <ModernSelect label="Renewal frequency" name="renewalFrequency" value={value("renewalFrequency")} options={toSelectOptions(lookupOptions.renewalFrequency)} />
       <FloatingInput label="Monthly EGP" name="monthlyCostEgp" type="number" step="0.01" defaultValue={value("monthlyCostEgp") || value("costEgp")} />
       <FloatingInput label="Yearly EGP" name="yearlyCostEgp" type="number" step="0.01" defaultValue={value("yearlyCostEgp")} />
       <FloatingInput label="5 Years EGP" name="fiveYearsCostEgp" type="number" step="0.01" defaultValue={value("fiveYearsCostEgp")} />
@@ -85,68 +86,8 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
   );
 }
 
-function FloatingSelect({
-  label,
-  name,
-  defaultValue,
-  options = []
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  options?: Array<{ id: string; value: string }>;
-}) {
-  return (
-    <label className="group relative block">
-      <select
-        name={name}
-        defaultValue={defaultValue ?? ""}
-        className="focus-ring h-14 w-full rounded-xl border border-border bg-elevated/80 px-4 pb-2 pt-6 text-sm shadow-sm transition hover:border-primary/40"
-      >
-        <option value="">Not set</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.value}>
-            {option.value}
-          </option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute left-4 top-2 text-xs font-medium text-muted-foreground transition-all group-focus-within:text-primary">
-        {label}
-      </span>
-    </label>
-  );
-}
-
-function FloatingMultiSelect({
-  label,
-  name,
-  options,
-  selectedValues
-}: {
-  label: string;
-  name: string;
-  options: Array<{ value: string; label: string }>;
-  selectedValues: string[];
-}) {
-  return (
-    <label className="group relative block">
-      <select
-        name={name}
-        multiple
-        defaultValue={selectedValues}
-        className="focus-ring min-h-28 w-full rounded-xl border border-border bg-elevated/80 px-4 pb-2 pt-7 text-sm shadow-sm transition hover:border-primary/40"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute left-4 top-2 text-xs font-medium text-muted-foreground transition-all group-focus-within:text-primary">
-        {label}
-      </span>
-    </label>
-  );
+function toSelectOptions(options: Array<{ id: string; value: string }> = []) {
+  return options.map((option) => ({ value: option.value, label: option.value }));
 }
 
 type FloatingInputProps = React.InputHTMLAttributes<HTMLInputElement> & {

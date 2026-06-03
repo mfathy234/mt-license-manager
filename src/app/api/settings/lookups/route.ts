@@ -16,6 +16,13 @@ const schema = z.object({
   )
 });
 
+const singleSchema = z.object({
+  category: z.string().trim().min(1),
+  value: z.string().trim().min(1),
+  sortOrder: z.coerce.number().int().default(0),
+  active: z.boolean().default(true)
+});
+
 export async function GET() {
   const auth = await requireSession("license:read");
   if ("error" in auth) return auth.error;
@@ -37,4 +44,16 @@ export async function PUT(request: Request) {
     )
   );
   return NextResponse.json({ ok: true });
+}
+
+export async function POST(request: Request) {
+  const auth = await requireSession("settings:write");
+  if ("error" in auth) return auth.error;
+  const input = singleSchema.parse(await request.json());
+  const value = await prisma.lookupValue.upsert({
+    where: { category_value: { category: input.category, value: input.value } },
+    create: input,
+    update: { sortOrder: input.sortOrder, active: input.active }
+  });
+  return NextResponse.json({ value }, { status: 201 });
 }

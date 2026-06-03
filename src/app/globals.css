@@ -67,6 +67,120 @@ textarea {
   -webkit-backdrop-filter: blur(22px) saturate(165%);
 }
 
+.license-datepicker {
+  --rdp-accent-color: hsl(var(--primary));
+  --rdp-background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  min-width: 310px;
+}
+
+.license-datepicker .rdp-root,
+.license-datepicker .rdp-months,
+.license-datepicker .rdp-month {
+  width: 100%;
+}
+
+.license-datepicker .rdp-caption,
+.license-datepicker .rdp-month_caption {
+  position: relative;
+  min-height: 38px;
+  padding-right: 78px;
+}
+
+.license-datepicker .rdp-dropdowns {
+  display: flex;
+  gap: 8px;
+}
+
+.license-datepicker select {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--elevated));
+  color: hsl(var(--foreground));
+  padding: 0 28px 0 10px;
+  font-size: 13px;
+}
+
+.license-datepicker .rdp-nav {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.license-datepicker .rdp-button_previous,
+.license-datepicker .rdp-button_next {
+  display: grid;
+  height: 32px;
+  width: 32px;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--elevated));
+  color: hsl(var(--muted-foreground));
+}
+
+.license-datepicker .rdp-button_previous:hover,
+.license-datepicker .rdp-button_next:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+}
+
+.license-datepicker .rdp-weekdays,
+.license-datepicker .rdp-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.license-datepicker .rdp-weekday {
+  height: 28px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+}
+
+.license-datepicker .rdp-day {
+  height: 38px;
+  width: 38px;
+}
+
+.license-datepicker .rdp-day_button {
+  height: 38px;
+  width: 38px;
+  border-radius: 12px;
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.license-datepicker .rdp-day_button:hover {
+  background: hsl(var(--muted));
+}
+
+.license-datepicker .rdp-selected .rdp-day_button {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 700;
+}
+
+.license-datepicker .rdp-today .rdp-day_button {
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
+
+.license-datepicker .rdp-selected.rdp-today .rdp-day_button {
+  color: hsl(var(--primary-foreground));
+}
+
+.license-datepicker .rdp-outside,
+.license-datepicker .rdp-disabled {
+  opacity: 0.42;
+}
+
 @supports not (background: color-mix(in srgb, white, transparent)) {
   .glass-surface {
     background: hsla(var(--glass), 0.9);
