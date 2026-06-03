@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Search } from "lucide-react";
+import { X, Pencil, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -30,6 +30,7 @@ export function LookupsManager({ initialValues }: { initialValues: LookupRow[] }
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [editing, setEditing] = useState<LookupRow | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [message, setMessage] = useState("");
 
   const filtered = useMemo(() => {
@@ -63,13 +64,14 @@ export function LookupsManager({ initialValues }: { initialValues: LookupRow[] }
     setMessage(response.ok ? "Saved." : "Save failed.");
     if (response.ok) {
       setEditing(null);
+      setModalOpen(false);
       router.refresh();
     }
   }
 
   return (
     <div className="grid gap-5">
-      <div className="grid gap-3 lg:grid-cols-[1fr_260px_140px]">
+      <div className="grid gap-3 lg:grid-cols-[1fr_260px_140px_auto]">
         <label className="relative block">
           <Search aria-hidden className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -104,47 +106,19 @@ export function LookupsManager({ initialValues }: { initialValues: LookupRow[] }
           <option value={25}>25 rows</option>
           <option value={50}>50 rows</option>
         </select>
+        <Button
+          type="button"
+          onClick={() => {
+            setEditing(null);
+            setModalOpen(true);
+          }}
+        >
+          <Plus aria-hidden className="h-4 w-4" />
+          Add lookup
+        </Button>
       </div>
 
-      <form onSubmit={save} className="grid gap-3 rounded-xl border border-border bg-elevated/60 p-4 lg:grid-cols-[220px_1fr_120px_100px_auto]">
-        <select
-          name="category"
-          defaultValue={editing?.category ?? "status"}
-          className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
-          key={editing?.id ?? "new-category"}
-        >
-          {categoryOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-        <input
-          name="value"
-          defaultValue={editing?.value ?? ""}
-          placeholder="Lookup value"
-          className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
-          required
-          key={editing?.id ?? "new-value"}
-        />
-        <input
-          name="sortOrder"
-          defaultValue={editing?.sortOrder ?? 0}
-          type="number"
-          className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
-          key={editing?.id ?? "new-order"}
-        />
-        <label className="flex h-11 items-center gap-2 text-sm font-medium">
-          <input name="active" type="checkbox" defaultChecked={editing?.active ?? true} key={editing?.id ?? "new-active"} />
-          Active
-        </label>
-        <div className="flex gap-2">
-          <Button>
-            <Plus aria-hidden className="h-4 w-4" />
-            {editing ? "Save" : "Add"}
-          </Button>
-          {editing ? <SecondaryButton type="button" onClick={() => setEditing(null)}>Cancel</SecondaryButton> : null}
-        </div>
-        {message ? <p className="text-sm text-muted-foreground lg:col-span-5">{message}</p> : null}
-      </form>
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
@@ -182,6 +156,79 @@ export function LookupsManager({ initialValues }: { initialValues: LookupRow[] }
           </SecondaryButton>
         </div>
       </div>
+
+      {modalOpen || editing ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
+          <div className="glass-surface w-full max-w-xl rounded-2xl border p-5 shadow-glass">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{editing ? "Edit lookup" : "Add lookup"}</h2>
+                <p className="text-sm text-muted-foreground">Lookup values appear as dropdown options in license forms.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                className="focus-ring grid h-9 w-9 place-items-center rounded-xl border border-border bg-elevated text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setEditing(null);
+                  setModalOpen(false);
+                }}
+              >
+                <X aria-hidden className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={save} className="grid gap-4">
+              <label className="grid gap-1.5 text-sm font-medium">
+                Category
+                <select
+                  name="category"
+                  defaultValue={editing?.category ?? "status"}
+                  className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
+                >
+                  {categoryOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Value
+                <input
+                  name="value"
+                  defaultValue={editing?.value ?? ""}
+                  placeholder="Lookup value"
+                  className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
+                  required
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Sort order
+                <input
+                  name="sortOrder"
+                  defaultValue={editing?.sortOrder ?? 0}
+                  type="number"
+                  className="focus-ring h-11 rounded-xl border border-border bg-elevated px-3 text-sm"
+                />
+              </label>
+              <label className="flex h-11 items-center gap-2 text-sm font-medium">
+                <input name="active" type="checkbox" defaultChecked={editing?.active ?? true} />
+                Active
+              </label>
+              <div className="flex justify-end gap-2">
+                <SecondaryButton
+                  type="button"
+                  onClick={() => {
+                    setEditing(null);
+                    setModalOpen(false);
+                  }}
+                >
+                  Cancel
+                </SecondaryButton>
+                <Button>{editing ? "Save changes" : "Add lookup"}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
