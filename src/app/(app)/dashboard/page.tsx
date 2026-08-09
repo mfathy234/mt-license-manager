@@ -1,17 +1,34 @@
 import { AlertTriangle, CalendarClock, KeyRound, Mail } from "lucide-react";
+import Link from "next/link";
 
-import { Panel } from "@/components/ui";
+import {
+  EmptyState,
+  LinkButton,
+  PageHeader,
+  Panel,
+  StatCard,
+  TableEmpty,
+  TableScroll,
+  THead,
+  Td,
+  Th,
+  Tr
+} from "@/components/ui";
 import { decryptLicense } from "@/lib/license-secure";
 import { prisma } from "@/lib/prisma";
-import { formatDate } from "@/lib/utils";
+import { expiryBadge, formatDate } from "@/lib/utils";
+
+const REMINDER_WINDOW_DAYS = 30;
 
 export default async function DashboardPage() {
   const now = new Date();
   const soon = new Date(now);
-  soon.setDate(soon.getDate() + 30);
-  const [licenseCount, expiringCount, recipientCount, recent] = await Promise.all([
+  soon.setDate(soon.getDate() + REMINDER_WINDOW_DAYS);
+
+  const [licenseCount, expiringCount, expiredCount, recipientCount, recent] = await Promise.all([
     prisma.license.count(),
     prisma.license.count({ where: { expiryDate: { gte: now, lte: soon } } }),
+    prisma.license.count({ where: { expiryDate: { lt: now } } }),
     prisma.emailRecipient.count({ where: { active: true } }),
     prisma.license.findMany({
       orderBy: { updatedAt: "desc" },
@@ -21,59 +38,80 @@ export default async function DashboardPage() {
   ]);
   const recentLicenses = recent.map(decryptLicense);
 
-  const stats = [
-    { label: "Licenses", value: licenseCount, icon: KeyRound },
-    { label: "Expiring in 30 days", value: expiringCount, icon: AlertTriangle },
-    { label: "Recipients", value: recipientCount, icon: Mail },
-    { label: "Reminder window", value: "30 days", icon: CalendarClock }
-  ];
-
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Operational view of licenses, subscriptions, and renewals.</p>
-      </div>
+      <PageHeader title="Dashboard" description="Operational view of licenses, subscriptions, and renewals." />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Panel key={stat.label}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="mt-1 text-2xl font-semibold">{stat.value}</p>
-                </div>
-                <Icon aria-hidden className="h-5 w-5 text-primary" />
-              </div>
-            </Panel>
-          );
-        })}
+        <StatCard label="Licenses" value={licenseCount} icon={<KeyRound aria-hidden className="h-5 w-5" />} />
+        <StatCard
+          label={`Expiring in ${REMINDER_WINDOW_DAYS} days`}
+          value={expiringCount}
+          icon={<CalendarClock aria-hidden className="h-5 w-5" />}
+          hint="Renewal reminders are queued for these."
+        />
+        <StatCard
+          label="Already expired"
+          value={expiredCount}
+          icon={<AlertTriangle aria-hidden className="h-5 w-5" />}
+          hint={expiredCount > 0 ? "Needs attention." : "Nothing overdue."}
+        />
+        <StatCard label="Active recipients" value={recipientCount} icon={<Mail aria-hidden className="h-5 w-5" />} />
       </div>
-      <Panel>
-        <h2 className="font-semibold">Recently updated</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted-foreground">
-              <tr>
-                <th className="py-2">License</th>
-                <th>Branch</th>
-                <th>Vendor</th>
-                <th>Expiry</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentLicenses.map((license) => (
-                <tr key={license.id} className="border-t border-border">
-                  <td className="py-3 font-medium">{license.details}</td>
-                  <td>{license.branch || "-"}</td>
-                  <td>{license.vendor || "-"}</td>
-                  <td>{formatDate(license.expiryDate)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+      <Panel
+        title="Recently updated"
+        actions={
+          <LinkButton href="/licenses" variant="secondary" size="sm">
+            View all licenses
+          </LinkButton>
+        }
+        bodyClassName="p-5 pt-3"
+      >
+        <TableScroll minWidthClassName="min-w-[640px]">
+          <THead>
+            <tr>
+              <Th>License</Th>
+              <Th>Branch</Th>
+              <Th>Vendor</Th>
+              <Th>Expiry</Th>
+            </tr>
+          </THead>
+          <tbody>
+            {recentLicenses.map((license) => {
+              const badge = expiryBadge(license.expiryDate, now);
+              return (
+                <Tr key={license.id}>
+                  <Td className="font-medium">
+                    <Link href={`/licenses/${license.id}`} className="focus-ring rounded text-primary hover:underline">
+                      {license.details}
+                    </Link>
+                  </Td>
+                  <Td>{license.branch || "—"}</Td>
+                  <Td>{license.vendor || "—"}</Td>
+                  <Td>
+                    <span className="tabular block">{formatDate(license.expiryDate)}</span>
+                    {badge ? (
+                      <span className={badge.tone === "danger" ? "text-xs text-danger" : "text-xs text-warning"}>
+                        {badge.label}
+                      </span>
+                    ) : null}
+                  </Td>
+                </Tr>
+              );
+            })}
+            {recentLicenses.length === 0 ? (
+              <TableEmpty colSpan={4}>
+                <EmptyState
+                  icon={<KeyRound aria-hidden className="h-5 w-5" />}
+                  title="No licenses yet"
+                  description="Create a license or import the workbook to get started."
+                  action={<LinkButton href="/licenses/new" size="sm">New license</LinkButton>}
+                />
+              </TableEmpty>
+            ) : null}
+          </tbody>
+        </TableScroll>
       </Panel>
     </div>
   );

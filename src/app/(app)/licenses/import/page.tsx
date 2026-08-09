@@ -1,12 +1,13 @@
 import { ImportWorkbook } from "@/components/import-workbook";
+import { PageHeader } from "@/components/ui";
 
 export default function ImportPage() {
   return (
     <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Import workbook</h1>
-        <p className="text-sm text-muted-foreground">Preview and import the Microtec license spreadsheet.</p>
-      </div>
+      <PageHeader
+        title="Import workbook"
+        description="Preview and import the Microtec license spreadsheet. Nothing is written until you confirm."
+      />
       <ImportWorkbook />
     </div>
   );
