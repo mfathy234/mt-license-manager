@@ -44,13 +44,13 @@ export const licenseSchema = z.object({
 });
 
 export const recipientSchema = z.object({
-  name: z.string().trim().min(1),
-  email: z.string().trim().email(),
+  name: z.string().trim().min(1, "Name is required"),
+  email: z.string().trim().email("Enter a valid email address"),
   active: z.boolean().optional()
 });
 
 export const groupSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z.string().trim().min(1, "Group name is required"),
   active: z.boolean().optional(),
   recipientIds: z.array(z.string()).optional()
 });

@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Button, Input, Label, Panel } from "@/components/ui";
+import { Button, Field, FormMessage, Panel } from "@/components/ui";
+import { getErrorMessage, requestJson } from "@/lib/http";
+
+const MIN_PASSWORD_LENGTH = 10;
 
 export function SetupForm() {
   const router = useRouter();
@@ -12,40 +15,39 @@ export function SetupForm() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.currentTarget));
     setSaving(true);
     setError("");
-    const data = Object.fromEntries(new FormData(event.currentTarget));
-    const response = await fetch("/api/setup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-    setSaving(false);
-    if (!response.ok) {
-      setError((await response.json()).error ?? "Setup failed.");
-      return;
+
+    try {
+      await requestJson("/api/setup", { method: "POST", body: data });
+      router.push("/login");
+    } catch (submitError) {
+      setError(getErrorMessage(submitError, "Setup failed."));
+      setSaving(false);
     }
-    router.push("/login");
   }
 
   return (
     <Panel className="w-full max-w-md">
       <h1 className="text-xl font-semibold">First admin setup</h1>
-      <form onSubmit={submit} className="mt-5 grid gap-4">
-        <Label>
-          Name
-          <Input name="name" required />
-        </Label>
-        <Label>
-          Email
-          <Input name="email" type="email" required />
-        </Label>
-        <Label>
-          Password
-          <Input name="password" type="password" minLength={10} required />
-        </Label>
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-        <Button disabled={saving}>{saving ? "Creating..." : "Create admin"}</Button>
+      <p className="mt-1 text-sm text-muted-foreground">This account gets full access to every license and setting.</p>
+      <form onSubmit={submit} noValidate className="mt-6 grid gap-4">
+        <Field label="Name" name="name" autoComplete="name" required />
+        <Field label="Email" name="email" type="email" autoComplete="email" required />
+        <Field
+          label="Password"
+          name="password"
+          type="password"
+          minLength={MIN_PASSWORD_LENGTH}
+          autoComplete="new-password"
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+          required
+        />
+        {error ? <FormMessage tone="danger">{error}</FormMessage> : null}
+        <Button loading={saving} className="w-full">
+          {saving ? "Creating..." : "Create admin"}
+        </Button>
       </form>
     </Panel>
   );

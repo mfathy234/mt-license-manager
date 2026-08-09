@@ -1,20 +1,46 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { KeyRound, Plus, SearchX } from "lucide-react";
 
 import { LicenseSearchToolbar } from "@/components/license-search-toolbar";
-import { LinkButton, Panel, StatusPill } from "@/components/ui";
+import {
+  EmptyState,
+  LinkButton,
+  PageHeader,
+  Panel,
+  StatusPill,
+  TableEmpty,
+  TableScroll,
+  THead,
+  Td,
+  Th,
+  Tr
+} from "@/components/ui";
 import { decryptLicense } from "@/lib/license-secure";
 import { getLicenseFormOptions } from "@/lib/lookups";
 import { prisma } from "@/lib/prisma";
-import { formatDate, formatMoney } from "@/lib/utils";
+import { expiryBadge, formatDate, formatMoney } from "@/lib/utils";
 
-type Props = { searchParams: Promise<{ q?: string; status?: string; serviceType?: string; branch?: string; adminId?: string; page?: string; pageSize?: string }> };
+type SearchParams = {
+  q?: string;
+  status?: string;
+  serviceType?: string;
+  branch?: string;
+  adminId?: string;
+  renewalFrequency?: string;
+  page?: string;
+  pageSize?: string;
+};
+
+type Props = { searchParams: Promise<SearchParams> };
+
+const COLUMN_COUNT = 9;
 
 export default async function LicensesPage({ searchParams }: Props) {
   const params = await searchParams;
-  const query = params.q?.trim();
+  const query = params.q?.trim().toLowerCase();
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const pageSize = Math.min(50, Math.max(10, Number(params.pageSize ?? 10) || 10));
+
   const [licenseRows, formOptions] = await Promise.all([
     prisma.license.findMany({
       orderBy: [{ expiryDate: "asc" }, { createdAt: "asc" }],
@@ -22,81 +48,130 @@ export default async function LicensesPage({ searchParams }: Props) {
     }),
     getLicenseFormOptions()
   ]);
+
+  // Status, service, branch and renewal frequency live inside the encrypted
+  // payload, so every filter has to run after decryption rather than in SQL.
   const licenses = licenseRows.map(decryptLicense);
-  const filtered = query
-    ? licenses.filter((license) =>
-        [license.details, license.vendor, license.branch, license.serviceType, license.adminsDisplay]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(query.toLowerCase()))
-      )
-    : licenses;
-  const advancedFiltered = filtered.filter((license) => {
+  const filtered = licenses.filter((license) => {
+    const matchesQuery =
+      !query ||
+      [license.details, license.vendor, license.branch, license.serviceType, license.adminsDisplay]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(query));
     const matchesStatus = !params.status || license.status === params.status;
     const matchesService = !params.serviceType || license.serviceType === params.serviceType;
     const matchesBranch = !params.branch || license.branch === params.branch;
     const matchesAdmin = !params.adminId || license.adminIds.includes(params.adminId);
-    return matchesStatus && matchesService && matchesBranch && matchesAdmin;
+    const matchesRenewal = !params.renewalFrequency || license.renewalFrequency === params.renewalFrequency;
+    return matchesQuery && matchesStatus && matchesService && matchesBranch && matchesAdmin && matchesRenewal;
   });
-  const pageCount = Math.max(1, Math.ceil(advancedFiltered.length / pageSize));
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const paged = advancedFiltered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const rangeStart = filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(currentPage * pageSize, filtered.length);
+  const hasFilters = Boolean(
+    query || params.status || params.serviceType || params.branch || params.adminId || params.renewalFrequency
+  );
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold">Licenses</h1>
-          <p className="text-sm text-muted-foreground">Search and manage subscription ownership, costs, and renewals.</p>
-        </div>
-        <LinkButton href="/licenses/new">
-          <Plus aria-hidden className="h-4 w-4" />
-          New license
-        </LinkButton>
-      </div>
+      <PageHeader
+        title="Licenses"
+        description="Search and manage subscription ownership, costs, and renewals."
+        actions={
+          <LinkButton href="/licenses/new">
+            <Plus aria-hidden className="h-4 w-4" />
+            New license
+          </LinkButton>
+        }
+      />
       <Panel>
         <LicenseSearchToolbar
           lookupOptions={formOptions.lookupOptions}
           adminOptions={formOptions.admins}
           page={currentPage}
           pageCount={pageCount}
-          total={advancedFiltered.length}
+          total={filtered.length}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="text-muted-foreground">
-              <tr>
-                <th className="py-2">Details</th>
-                <th>Status</th>
-                <th>Service</th>
-                <th>Branch</th>
-                <th>Vendor</th>
-                <th>Admins</th>
-                <th>Expiry</th>
-                <th>Monthly USD</th>
-                <th>Yearly USD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paged.map((license) => (
-                <tr key={license.id} className="border-t border-border">
-                  <td className="py-3 font-medium">
-                    <Link href={`/licenses/${license.id}`} className="text-primary hover:underline">
+      </Panel>
+      <Panel bodyClassName="p-5 pt-3">
+        <TableScroll minWidthClassName="min-w-[1000px]">
+          <THead>
+            <tr>
+              <Th>Details</Th>
+              <Th>Status</Th>
+              <Th>Service</Th>
+              <Th>Branch</Th>
+              <Th>Vendor</Th>
+              <Th>Admins</Th>
+              <Th>Renewal</Th>
+              <Th>Expiry</Th>
+              <Th align="right">Yearly USD</Th>
+            </tr>
+          </THead>
+          <tbody>
+            {paged.map((license) => {
+              const badge = expiryBadge(license.expiryDate);
+              return (
+                <Tr key={license.id}>
+                  <Td className="font-medium">
+                    <Link href={`/licenses/${license.id}`} className="focus-ring rounded text-primary hover:underline">
                       {license.details}
                     </Link>
-                  </td>
-                  <td><StatusPill value={license.status} /></td>
-                  <td>{license.serviceType || "-"}</td>
-                  <td>{license.branch || "-"}</td>
-                  <td>{license.vendor || "-"}</td>
-                  <td>{license.adminsDisplay || "-"}</td>
-                  <td>{formatDate(license.expiryDate)}</td>
-                  <td>{formatMoney(license.monthlyCostUsd ?? license.costUsd, "USD")}</td>
-                  <td>{formatMoney(license.yearlyCostUsd, "USD")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </Td>
+                  <Td>
+                    <StatusPill value={license.status} />
+                  </Td>
+                  <Td>{license.serviceType || "—"}</Td>
+                  <Td>{license.branch || "—"}</Td>
+                  <Td>{license.vendor || "—"}</Td>
+                  <Td className="max-w-[18ch] truncate" title={license.adminsDisplay || undefined}>
+                    {license.adminsDisplay || "—"}
+                  </Td>
+                  <Td>{license.renewalFrequency || "—"}</Td>
+                  <Td>
+                    <span className="tabular block">{formatDate(license.expiryDate)}</span>
+                    {badge ? (
+                      <span className={badge.tone === "danger" ? "text-xs text-danger" : "text-xs text-warning"}>
+                        {badge.label}
+                      </span>
+                    ) : null}
+                  </Td>
+                  <Td align="right" className="tabular">
+                    {formatMoney(license.yearlyCostUsd, "USD")}
+                  </Td>
+                </Tr>
+              );
+            })}
+            {paged.length === 0 ? (
+              <TableEmpty colSpan={COLUMN_COUNT}>
+                {hasFilters ? (
+                  <EmptyState
+                    icon={<SearchX aria-hidden className="h-5 w-5" />}
+                    title="No licenses match these filters"
+                    description="Try removing a filter chip above, or clear them all to see every license."
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<KeyRound aria-hidden className="h-5 w-5" />}
+                    title="No licenses yet"
+                    description="Add your first license, or import the workbook to bring existing records in."
+                    action={
+                      <LinkButton href="/licenses/new" size="sm">
+                        <Plus aria-hidden className="h-4 w-4" />
+                        New license
+                      </LinkButton>
+                    }
+                  />
+                )}
+              </TableEmpty>
+            ) : null}
+          </tbody>
+        </TableScroll>
       </Panel>
     </div>
   );

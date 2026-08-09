@@ -2,12 +2,24 @@
 
 import { DayPicker } from "@daypicker/react";
 import { CalendarDays, Save } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ModernMultiSelect, ModernSelect } from "@/components/modern-select";
-import { Button } from "@/components/ui";
+import { Button, Field, FormMessage, TextareaField } from "@/components/ui";
+import { getErrorMessage, requestJson } from "@/lib/http";
 import { cn } from "@/lib/utils";
+
+/**
+ * Navigation bounds for the calendar. Without these, a `dropdown` caption layout
+ * defaults to "100 years ago until the end of the current year", which makes any
+ * future expiry date unreachable.
+ */
+const YEARS_BACK = 15;
+const YEARS_AHEAD = 30;
+const CURRENT_YEAR = new Date().getFullYear();
+const NAV_START_MONTH = new Date(CURRENT_YEAR - YEARS_BACK, 0, 1);
+const NAV_END_MONTH = new Date(CURRENT_YEAR + YEARS_AHEAD, 11, 31);
 
 type LicenseFormProps = {
   action: "create" | "update";
@@ -23,62 +35,100 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     setSaving(true);
     setError("");
-    const formData = new FormData(event.currentTarget);
+
     const data = {
       ...Object.fromEntries(formData),
       adminIds: formData.getAll("adminIds").map(String)
     };
-    const response = await fetch(action === "create" ? "/api/licenses" : `/api/licenses/${license?.id}`, {
-      method: action === "create" ? "POST" : "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-    setSaving(false);
-    if (!response.ok) {
-      setError((await response.json()).error ?? "Save failed.");
-      return;
+
+    try {
+      const payload = await requestJson<{ license: { id: string } }>(
+        action === "create" ? "/api/licenses" : `/api/licenses/${license?.id}`,
+        { method: action === "create" ? "POST" : "PUT", body: data }
+      );
+      router.push(`/licenses/${payload.license.id}`);
+      router.refresh();
+    } catch (submitError) {
+      setError(getErrorMessage(submitError, "Save failed."));
+      setSaving(false);
     }
-    const payload = await response.json();
-    router.push(`/licenses/${payload.license.id}`);
-    router.refresh();
   }
 
   const value = (key: string) => (license?.[key] ? String(license[key]).slice(0, 10) : "");
 
   return (
-    <form onSubmit={submit} className="grid gap-5 lg:grid-cols-2">
-      <FloatingInput label="Details" name="details" defaultValue={value("details")} required />
-      <ModernSelect label="Status" name="status" value={value("status")} options={toSelectOptions(lookupOptions.status)} />
-      <ModernSelect label="Service type" name="serviceType" value={value("serviceType")} options={toSelectOptions(lookupOptions.serviceType)} />
-      <ModernSelect label="Branch" name="branch" value={value("branch")} options={toSelectOptions(lookupOptions.branch)} />
-      <FloatingInput label="Vendor" name="vendor" defaultValue={value("vendor")} />
-      <FloatingInput label="Users count" name="usersCount" type="number" min="0" defaultValue={value("usersCount")} />
-      <FloatingInput label="Owner account" name="ownerAccount" defaultValue={value("ownerAccount")} />
-      <ModernMultiSelect
-        label="Admins"
-        name="adminIds"
-        options={adminOptions.map((admin) => ({ value: admin.id, label: admin.name }))}
-        selectedValues={Array.isArray(license?.adminIds) ? (license.adminIds as string[]) : []}
-      />
-      <FloatingDatePicker label="Start date" name="startDate" initialValue={value("startDate")} />
-      <FloatingDatePicker label="Expiry date" name="expiryDate" initialValue={value("expiryDate")} />
-      <ModernSelect label="Payment method" name="paymentMethod" value={value("paymentMethod")} options={toSelectOptions(lookupOptions.paymentMethod)} />
-      <ModernSelect label="Renewal frequency" name="renewalFrequency" value={value("renewalFrequency")} options={toSelectOptions(lookupOptions.renewalFrequency)} />
-      <FloatingInput label="Monthly EGP" name="monthlyCostEgp" type="number" step="0.01" defaultValue={value("monthlyCostEgp") || value("costEgp")} />
-      <FloatingInput label="Yearly EGP" name="yearlyCostEgp" type="number" step="0.01" defaultValue={value("yearlyCostEgp")} />
-      <FloatingInput label="5 Years EGP" name="fiveYearsCostEgp" type="number" step="0.01" defaultValue={value("fiveYearsCostEgp")} />
-      <FloatingInput label="Monthly USD" name="monthlyCostUsd" type="number" step="0.01" defaultValue={value("monthlyCostUsd") || value("costUsd")} />
-      <FloatingInput label="Yearly USD" name="yearlyCostUsd" type="number" step="0.01" defaultValue={value("yearlyCostUsd")} />
-      <FloatingInput label="5 Years USD" name="fiveYearsCostUsd" type="number" step="0.01" defaultValue={value("fiveYearsCostUsd")} />
-      <div className="lg:col-span-2">
-        <FloatingTextarea label="Notes" name="notes" defaultValue={value("notes")} />
-      </div>
-      {error ? <p className="text-sm text-danger lg:col-span-2">{error}</p> : null}
-      <div className="lg:col-span-2">
-        <Button disabled={saving}>
-          <Save aria-hidden className="h-4 w-4" />
+    <form onSubmit={submit} className="grid gap-5">
+      <FormSection title="Identity" description="What the subscription is and who it belongs to.">
+        <Field label="Details" name="details" defaultValue={value("details")} required className="lg:col-span-2" />
+        <ModernSelect label="Status" name="status" value={value("status")} options={toSelectOptions(lookupOptions.status)} />
+        <ModernSelect
+          label="Service type"
+          name="serviceType"
+          value={value("serviceType")}
+          options={toSelectOptions(lookupOptions.serviceType)}
+        />
+        <ModernSelect label="Branch" name="branch" value={value("branch")} options={toSelectOptions(lookupOptions.branch)} />
+        <Field label="Vendor" name="vendor" defaultValue={value("vendor")} />
+        <Field label="Users count" name="usersCount" type="number" min="0" defaultValue={value("usersCount")} />
+        <Field label="Owner account" name="ownerAccount" defaultValue={value("ownerAccount")} />
+        <ModernMultiSelect
+          label="Admins"
+          name="adminIds"
+          options={adminOptions.map((admin) => ({ value: admin.id, label: admin.name }))}
+          selectedValues={Array.isArray(license?.adminIds) ? (license.adminIds as string[]) : []}
+        />
+      </FormSection>
+
+      <FormSection title="Term" description="Dates and how the subscription renews.">
+        <DatePickerField label="Start date" name="startDate" initialValue={value("startDate")} />
+        <DatePickerField label="Expiry date" name="expiryDate" initialValue={value("expiryDate")} />
+        <ModernSelect
+          label="Payment method"
+          name="paymentMethod"
+          value={value("paymentMethod")}
+          options={toSelectOptions(lookupOptions.paymentMethod)}
+        />
+        <ModernSelect
+          label="Renewal frequency"
+          name="renewalFrequency"
+          value={value("renewalFrequency")}
+          options={toSelectOptions(lookupOptions.renewalFrequency)}
+        />
+      </FormSection>
+
+      <FormSection title="Cost" description="Leave blank where a currency does not apply.">
+        <Field
+          label="Monthly EGP"
+          name="monthlyCostEgp"
+          type="number"
+          step="0.01"
+          defaultValue={value("monthlyCostEgp") || value("costEgp")}
+        />
+        <Field label="Yearly EGP" name="yearlyCostEgp" type="number" step="0.01" defaultValue={value("yearlyCostEgp")} />
+        <Field label="5 years EGP" name="fiveYearsCostEgp" type="number" step="0.01" defaultValue={value("fiveYearsCostEgp")} />
+        <Field
+          label="Monthly USD"
+          name="monthlyCostUsd"
+          type="number"
+          step="0.01"
+          defaultValue={value("monthlyCostUsd") || value("costUsd")}
+        />
+        <Field label="Yearly USD" name="yearlyCostUsd" type="number" step="0.01" defaultValue={value("yearlyCostUsd")} />
+        <Field label="5 years USD" name="fiveYearsCostUsd" type="number" step="0.01" defaultValue={value("fiveYearsCostUsd")} />
+      </FormSection>
+
+      <FormSection title="Notes">
+        <TextareaField label="Notes" name="notes" defaultValue={value("notes")} className="lg:col-span-2" />
+      </FormSection>
+
+      {error ? <FormMessage tone="danger">{error}</FormMessage> : null}
+
+      <div className="flex justify-end border-t border-border pt-5">
+        <Button loading={saving}>
+          {saving ? null : <Save aria-hidden className="h-4 w-4" />}
           {saving ? "Saving..." : "Save license"}
         </Button>
       </div>
@@ -86,146 +136,165 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
   );
 }
 
+function FormSection({
+  title,
+  description,
+  children
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <fieldset className="grid gap-4">
+      <legend className="sr-only">{title}</legend>
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">{children}</div>
+    </fieldset>
+  );
+}
+
 function toSelectOptions(options: Array<{ id: string; value: string }> = []) {
   return options.map((option) => ({ value: option.value, label: option.value }));
 }
 
-type FloatingInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
-  name: string;
-};
-
-function FloatingInput({ label, className, ...props }: FloatingInputProps) {
-  return (
-    <label className="group relative block">
-      <input
-        placeholder=" "
-        className={cn(
-          "focus-ring peer h-14 w-full rounded-xl border border-border bg-elevated/80 px-4 pb-2 pt-6 text-sm shadow-sm transition placeholder:text-transparent hover:border-primary/40",
-          className
-        )}
-        {...props}
-      />
-      <span className="pointer-events-none absolute left-4 top-2 text-xs font-medium text-muted-foreground transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-xs peer-focus:text-primary">
-        {label}
-      </span>
-    </label>
-  );
-}
-
-type FloatingTextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
-  label: string;
-  name: string;
-};
-
-function FloatingTextarea({ label, className, ...props }: FloatingTextareaProps) {
-  return (
-    <label className="group relative block">
-      <textarea
-        placeholder=" "
-        className={cn(
-          "focus-ring peer min-h-28 w-full rounded-xl border border-border bg-elevated/80 px-4 pb-3 pt-7 text-sm shadow-sm transition placeholder:text-transparent hover:border-primary/40",
-          className
-        )}
-        {...props}
-      />
-      <span className="pointer-events-none absolute left-4 top-2 text-xs font-medium text-muted-foreground transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-xs peer-focus:text-primary">
-        {label}
-      </span>
-    </label>
-  );
-}
-
-function FloatingDatePicker({ label, name, initialValue }: { label: string; name: string; initialValue?: string }) {
+function DatePickerField({ label, name, initialValue }: { label: string; name: string; initialValue?: string }) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Date | undefined>(() => {
-    if (!initialValue) return undefined;
-    const parsed = new Date(`${initialValue}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  });
+  const [selected, setSelected] = useState<Date | undefined>(() => parseDateInput(initialValue));
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   const isoValue = selected ? toDateInputValue(selected) : "";
-  const displayValue = selected
-    ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(selected)
-    : "";
+  const displayValue = selected ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(selected) : "";
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <input type="hidden" name={name} value={isoValue} />
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className={cn(
-          "focus-ring group relative flex h-14 w-full items-center justify-between rounded-xl border border-border bg-elevated/80 px-4 pb-2 pt-6 text-left text-sm shadow-sm transition hover:border-primary/40",
-          open && "border-primary/60"
+          "focus-ring group relative flex h-14 w-full items-center justify-between gap-3 rounded-xl border bg-elevated/80 px-4 pb-2 pt-6 text-left text-sm shadow-sm transition duration-150 ease-out-quart hover:border-primary/40",
+          open ? "border-primary/60" : "border-border"
         )}
       >
-        <span className={cn("truncate", !displayValue && "text-transparent")}>{displayValue || "Select date"}</span>
-        <CalendarDays aria-hidden className="h-4 w-4 text-muted-foreground transition group-hover:text-primary" />
+        <span className={cn("truncate", !displayValue && "text-muted-foreground")}>{displayValue || "Select a date"}</span>
+        <CalendarDays aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-primary" />
         <span
           className={cn(
-            "pointer-events-none absolute left-4 text-xs font-medium text-muted-foreground transition-all",
-            displayValue ? "top-2 text-xs" : "top-4 text-sm",
-            open && "top-2 text-xs text-primary"
+            "pointer-events-none absolute left-4 top-2 text-xs font-medium transition-colors",
+            open ? "text-primary" : "text-muted-foreground"
           )}
         >
           {label}
         </span>
       </button>
       {open ? (
-        <div className="glass-surface absolute left-0 top-16 z-30 rounded-2xl border p-3 shadow-glass">
+        <div
+          role="dialog"
+          aria-label={label}
+          className="glass-surface absolute left-0 top-16 z-dropdown rounded-2xl border p-3 shadow-popover"
+        >
           <DayPicker
             mode="single"
             selected={selected}
+            defaultMonth={selected ?? new Date()}
+            startMonth={NAV_START_MONTH}
+            endMonth={NAV_END_MONTH}
             onSelect={(date) => {
               setSelected(date);
               if (date) setOpen(false);
             }}
             captionLayout="dropdown"
             classNames={{
-              root: "license-datepicker",
+              // The library stylesheet is not imported; every visual rule lives
+              // here or under `.license-datepicker` in globals.css.
+              root: "license-datepicker relative",
               months: "flex",
-              month: "space-y-3",
-              month_caption: "flex items-center justify-center gap-2 px-2",
-              caption_label: "text-sm font-semibold",
-              dropdowns: "flex items-center justify-center gap-2",
-              dropdown: "rounded-lg border border-border bg-elevated px-2 py-1 text-sm",
-              nav: "absolute right-3 top-3 flex gap-1",
+              month: "space-y-2",
+              month_caption: "flex items-center gap-2 pb-1 pr-[80px]",
+              dropdowns: "flex items-center gap-2",
+              dropdown_root: "relative inline-flex",
+              dropdown: "absolute inset-0 h-full w-full cursor-pointer opacity-0",
+              caption_label:
+                "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-elevated px-3 text-sm font-medium",
+              chevron: "h-4 w-4 shrink-0 fill-current",
+              nav: "absolute right-0 top-0 flex gap-1",
               button_previous:
-                "grid h-8 w-8 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground hover:text-foreground",
+                "focus-ring grid h-9 w-9 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
               button_next:
-                "grid h-8 w-8 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground hover:text-foreground",
+                "focus-ring grid h-9 w-9 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
               weekdays: "grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground",
-              weekday: "h-7 leading-7",
+              weekday: "h-7 font-medium leading-7",
               week: "grid grid-cols-7 gap-1",
-              day: "h-9 w-9 rounded-lg text-sm transition hover:bg-muted",
-              day_button: "h-9 w-9 rounded-lg",
-              selected: "bg-primary text-primary-foreground hover:bg-primary",
-              today: "text-primary font-semibold",
-              outside: "text-muted-foreground/45",
-              disabled: "text-muted-foreground/35"
+              day: "h-9 w-9",
+              day_button: "focus-ring h-9 w-9 rounded-lg text-sm transition hover:bg-muted",
+              selected: "day-selected",
+              today: "day-today",
+              outside: "day-outside",
+              disabled: "day-disabled"
             }}
           />
-          <div className="mt-2 flex justify-between border-t border-border pt-2">
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
             <button
               type="button"
-              className="rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
               onClick={() => setSelected(undefined)}
             >
               Clear
             </button>
-            <button
-              type="button"
-              className="rounded-lg px-3 py-2 text-xs font-medium text-primary hover:bg-muted"
-              onClick={() => setOpen(false)}
-            >
-              Done
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={() => {
+                  setSelected(new Date());
+                  setOpen(false);
+                }}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-primary transition hover:bg-muted"
+                onClick={() => setOpen(false)}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
     </div>
   );
+}
+
+function parseDateInput(value?: string) {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
 function toDateInputValue(date: Date) {

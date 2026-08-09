@@ -26,10 +26,11 @@ const selectStyles: StylesConfig<Option, boolean> = {
   indicatorSeparator: () => ({ display: "none" }),
   dropdownIndicator: (base) => ({ ...base, color: "hsl(var(--muted-foreground))" }),
   clearIndicator: (base) => ({ ...base, color: "hsl(var(--muted-foreground))" }),
-  menuPortal: (base) => ({ ...base, zIndex: 80 }),
+  // Matches the `popover` step of the semantic z-scale in tailwind.config.ts.
+  menuPortal: (base) => ({ ...base, zIndex: 60 }),
   menu: (base) => ({
     ...base,
-    zIndex: 80,
+    zIndex: 60,
     overflow: "hidden",
     borderRadius: 14,
     border: "1px solid hsl(var(--border))",
@@ -63,15 +64,22 @@ export function ModernSelect({
   name,
   options,
   value,
-  onValueChange
+  onValueChange,
+  isClearable = true
 }: {
   label: string;
   name: string;
   options: Option[];
   value?: string;
   onValueChange?: (value: string) => void;
+  isClearable?: boolean;
 }) {
-  const [selected, setSelected] = useState<Option | null>(options.find((option) => option.value === value) ?? null);
+  // Controlled whenever the parent owns the value (filters); otherwise the
+  // internal value drives the hidden input for plain form submission.
+  const controlled = typeof onValueChange === "function";
+  const [internalValue, setInternalValue] = useState(value ?? "");
+  const currentValue = controlled ? value ?? "" : internalValue;
+  const selected = options.find((option) => option.value === currentValue) ?? null;
 
   return (
     <label className="relative block">
@@ -80,13 +88,14 @@ export function ModernSelect({
         instanceId={name}
         options={options}
         value={selected}
-        isClearable
+        isClearable={isClearable}
         isSearchable
         placeholder=" "
+        noOptionsMessage={() => "No options configured"}
         styles={selectStyles as StylesConfig<Option, false>}
         menuPortalTarget={typeof document === "undefined" ? undefined : document.body}
         onChange={(next: SingleValue<Option>) => {
-          setSelected(next);
+          if (!controlled) setInternalValue(next?.value ?? "");
           onValueChange?.(next?.value ?? "");
         }}
       />
