@@ -36,12 +36,13 @@ export function LicenseDeleteButton({
     setError("");
     try {
       await requestJson(`/api/licenses/${licenseId}`, { method: "DELETE" });
-      if (redirectTo) router.push(redirectTo);
       setOpen(false);
-      setDeleting(false);
-      router.refresh();
+      // Never both: a `refresh()` chasing a `push()` cancels the navigation.
+      if (redirectTo) router.push(redirectTo);
+      else router.refresh();
     } catch (deleteError) {
       setError(getErrorMessage(deleteError, "Delete failed."));
+    } finally {
       setDeleting(false);
     }
   }

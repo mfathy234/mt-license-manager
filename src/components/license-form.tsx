@@ -49,10 +49,19 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
         action === "create" ? "/api/licenses" : `/api/licenses/${license?.id}`,
         { method: action === "create" ? "POST" : "PUT", body: data }
       );
-      router.push(`/licenses/${payload.license.id}`);
-      router.refresh();
+      // `refresh()` fired straight after `push()` invalidates the router cache
+      // mid-transition and strands the navigation, leaving the button stuck on
+      // "Saving..." even though the save succeeded. A create navigates to a page
+      // it has never fetched, so the push alone is already fresh; an update is
+      // already on its own page and only needs the refresh.
+      if (action === "create") {
+        router.push(`/licenses/${payload.license.id}`);
+      } else {
+        router.refresh();
+      }
     } catch (submitError) {
       setError(getErrorMessage(submitError, "Save failed."));
+    } finally {
       setSaving(false);
     }
   }
