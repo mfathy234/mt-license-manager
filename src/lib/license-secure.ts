@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { License, LicenseAdmin, LicenseAdminAssignment, LicenseEncryptedData } from "@prisma/client";
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
@@ -71,6 +72,23 @@ export function decryptLicense<T extends LicenseWithSecureData>(license: T): Dec
     adminNames,
     adminsDisplay: adminNames.join(", ")
   };
+}
+
+/**
+ * Flattens a decrypted license into plain values for the client-side form.
+ *
+ * Prisma returns money columns as `Decimal` class instances, which cannot cross
+ * the server/client boundary — Next.js logs "Only plain objects can be passed to
+ * Client Components" for every cost field on every render. Stringifying them
+ * keeps the values intact and the boundary clean.
+ */
+export function toLicenseFormValues(license: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(license).map(([key, value]) => [
+      key,
+      Prisma.Decimal.isDecimal(value) ? value.toString() : value
+    ])
+  );
 }
 
 export function legacyAdminNames(value?: string | null) {

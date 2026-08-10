@@ -1,9 +1,13 @@
 import { Bell, KeyRound } from "lucide-react";
+import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 
+import { LicenseDeleteButton } from "@/components/license-delete-button";
 import { LicenseForm } from "@/components/license-form";
 import { EmptyState, PageHeader, Panel, StatCard, StatusPill } from "@/components/ui";
-import { decryptLicense } from "@/lib/license-secure";
+import { authOptions } from "@/lib/auth";
+import { decryptLicense, toLicenseFormValues } from "@/lib/license-secure";
+import { can } from "@/lib/permissions";
 import { getLicenseFormOptions } from "@/lib/lookups";
 import { prisma } from "@/lib/prisma";
 import { expiryBadge, formatDate, formatMoney } from "@/lib/utils";
@@ -12,6 +16,7 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function LicenseDetailPage({ params }: Props) {
   const { id } = await params;
+  const session = await getServerSession(authOptions);
   const [license, formOptions] = await Promise.all([
     prisma.license.findUnique({
       where: { id },
@@ -35,12 +40,24 @@ export default async function LicenseDetailPage({ params }: Props) {
       <PageHeader
         title={decrypted.details}
         description={subtitle || "No branch or vendor recorded"}
-        actions={<StatusPill value={decrypted.status} />}
+        actions={
+          <>
+            <StatusPill value={decrypted.status} />
+            {can(session?.user?.role, "license:delete") ? (
+              <LicenseDeleteButton
+                licenseId={decrypted.id}
+                licenseName={decrypted.details}
+                redirectTo="/licenses"
+              />
+            ) : null}
+          </>
+        }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Expiry" value={formatDate(decrypted.expiryDate)} hint={badge?.label} />
         <StatCard label="Renewal" value={decrypted.renewalFrequency || "—"} />
+        <StatCard label="Users" value={decrypted.usersCount ?? "—"} hint={`Started ${formatDate(decrypted.startDate)}`} />
         <StatCard label="Yearly USD" value={formatMoney(decrypted.yearlyCostUsd ?? decrypted.costUsd, "USD")} />
         <StatCard label="Admins" value={decrypted.adminsDisplay || "—"} />
       </div>
@@ -48,7 +65,7 @@ export default async function LicenseDetailPage({ params }: Props) {
       <Panel title="Edit license">
         <LicenseForm
           action="update"
-          license={decrypted as unknown as Record<string, unknown>}
+          license={toLicenseFormValues(decrypted as unknown as Record<string, unknown>)}
           adminOptions={formOptions.admins}
           lookupOptions={formOptions.lookupOptions}
         />

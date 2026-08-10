@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { KeyRound, Plus, SearchX } from "lucide-react";
+import { Eye, KeyRound, Plus, SearchX } from "lucide-react";
+import { getServerSession } from "next-auth";
 
+import { LicenseDeleteButton } from "@/components/license-delete-button";
 import { LicenseSearchToolbar } from "@/components/license-search-toolbar";
 import {
   EmptyState,
@@ -15,8 +17,10 @@ import {
   Th,
   Tr
 } from "@/components/ui";
+import { authOptions } from "@/lib/auth";
 import { decryptLicense } from "@/lib/license-secure";
 import { getLicenseFormOptions } from "@/lib/lookups";
+import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { expiryBadge, formatDate, formatMoney } from "@/lib/utils";
 
@@ -33,10 +37,12 @@ type SearchParams = {
 
 type Props = { searchParams: Promise<SearchParams> };
 
-const COLUMN_COUNT = 9;
+const COLUMN_COUNT = 10;
 
 export default async function LicensesPage({ searchParams }: Props) {
   const params = await searchParams;
+  const session = await getServerSession(authOptions);
+  const canDelete = can(session?.user?.role, "license:delete");
   const query = params.q?.trim().toLowerCase();
   const page = Math.max(1, Number(params.page ?? 1) || 1);
   const pageSize = Math.min(50, Math.max(10, Number(params.pageSize ?? 10) || 10));
@@ -99,7 +105,7 @@ export default async function LicensesPage({ searchParams }: Props) {
         />
       </Panel>
       <Panel bodyClassName="p-5 pt-3">
-        <TableScroll minWidthClassName="min-w-[1000px]">
+        <TableScroll minWidthClassName="min-w-[1180px]">
           <THead>
             <tr>
               <Th>Details</Th>
@@ -111,6 +117,7 @@ export default async function LicensesPage({ searchParams }: Props) {
               <Th>Renewal</Th>
               <Th>Expiry</Th>
               <Th align="right">Yearly USD</Th>
+              <Th align="right">Actions</Th>
             </tr>
           </THead>
           <tbody>
@@ -143,6 +150,17 @@ export default async function LicensesPage({ searchParams }: Props) {
                   </Td>
                   <Td align="right" className="tabular">
                     {formatMoney(license.yearlyCostUsd, "USD")}
+                  </Td>
+                  <Td align="right">
+                    <div className="flex items-center justify-end gap-2">
+                      <LinkButton href={`/licenses/${license.id}`} variant="secondary" size="sm">
+                        <Eye aria-hidden className="h-4 w-4" />
+                        View
+                      </LinkButton>
+                      {canDelete ? (
+                        <LicenseDeleteButton licenseId={license.id} licenseName={license.details} size="sm" iconOnly />
+                      ) : null}
+                    </div>
                   </Td>
                 </Tr>
               );

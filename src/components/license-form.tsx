@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { ModernMultiSelect, ModernSelect } from "@/components/modern-select";
 import { Button, Field, FormMessage, TextareaField } from "@/components/ui";
 import { getErrorMessage, requestJson } from "@/lib/http";
-import { cn } from "@/lib/utils";
+import { cn, toDateInputValue, toDateOnlyInput } from "@/lib/utils";
 
 /**
  * Navigation bounds for the calendar. Without these, a `dropdown` caption layout
@@ -57,7 +57,14 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
     }
   }
 
-  const value = (key: string) => (license?.[key] ? String(license[key]).slice(0, 10) : "");
+  /** Reads a field as text. Values are rendered whole — never truncated. */
+  const value = (key: string) => {
+    const raw = license?.[key];
+    return raw === null || raw === undefined ? "" : String(raw);
+  };
+
+  /** Reads a date field as the `YYYY-MM-DD` the picker and hidden input expect. */
+  const dateValue = (key: string) => toDateOnlyInput(license?.[key]);
 
   return (
     <form onSubmit={submit} className="grid gap-5">
@@ -83,8 +90,8 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
       </FormSection>
 
       <FormSection title="Term" description="Dates and how the subscription renews.">
-        <DatePickerField label="Start date" name="startDate" initialValue={value("startDate")} />
-        <DatePickerField label="Expiry date" name="expiryDate" initialValue={value("expiryDate")} />
+        <DatePickerField label="Start date" name="startDate" initialValue={dateValue("startDate")} />
+        <DatePickerField label="Expiry date" name="expiryDate" initialValue={dateValue("expiryDate")} />
         <ModernSelect
           label="Payment method"
           name="paymentMethod"
@@ -165,6 +172,12 @@ function DatePickerField({ label, name, initialValue }: { label: string; name: s
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Date | undefined>(() => parseDateInput(initialValue));
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Re-sync when the server sends a different stored date (e.g. after a save
+  // refreshes the edit page); local picks are otherwise left untouched.
+  useEffect(() => {
+    setSelected(parseDateInput(initialValue));
+  }, [initialValue]);
 
   useEffect(() => {
     if (!open) return;
@@ -295,11 +308,4 @@ function parseDateInput(value?: string) {
   if (!value) return undefined;
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-}
-
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
