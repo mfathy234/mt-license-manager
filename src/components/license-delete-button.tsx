@@ -24,7 +24,7 @@ export function LicenseDeleteButton({
   licenseName,
   size = "md",
   redirectTo,
-  iconOnly = false
+  iconOnly = false,
 }: LicenseDeleteButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -51,7 +51,8 @@ export function LicenseDeleteButton({
     <>
       <Button
         type="button"
-        variant="danger"
+        variant={iconOnly ? "ghost" : "secondary"}
+        className="text-danger hover:bg-danger-surface hover:text-danger"
         size={size}
         aria-label={`Delete ${licenseName}`}
         title={iconOnly ? `Delete ${licenseName}` : undefined}

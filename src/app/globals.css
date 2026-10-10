@@ -4,44 +4,71 @@
 
 :root {
   color-scheme: light;
-  --background: 210 24% 96%;
-  --foreground: 220 28% 10%;
+  --background: 210 25% 97%;
+  --foreground: 217 42% 22%;
+  --foreground-muted: 215 20% 43%;
   --surface: 0 0% 100%;
-  --elevated: 210 24% 99%;
-  --glass: 0 0% 100%;
-  --muted: 214 30% 92%;
-  --muted-foreground: 220 12% 38%;
-  --border: 220 20% 84%;
-  --primary: 211 100% 44%;
+  --surface-subtle: 196 35% 96%;
+  --elevated: 0 0% 100%;
+  --muted: 207 27% 92%;
+  --muted-foreground: 215 20% 43%;
+  --border: 210 20% 89%;
+  --control-border: 216 18% 62%;
+  --primary: 193 74% 40%;
+  --primary-hover: 192 74% 32%;
   --primary-foreground: 0 0% 100%;
-  --accent: 168 76% 42%;
+  --focus-ring: 193 74% 40%;
+  /* Matches the MFE shell side menu (layout-sidebar.component.scss). */
+  --sidebar: 192 75% 16%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-icon: 193 51% 88%;
+  --sidebar-edge: 193 74% 24%;
+  --sidebar-active: 193 74% 40%;
+  --table-header: 210 30% 95%;
+  --table-header-foreground: 215 22% 34%;
+  --accent: 193 74% 40%;
   --accent-foreground: 0 0% 100%;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 
   /* Status vocabulary: `-surface` is the tint, the base tone is the readable ink on it. */
-  --danger: 0 72% 44%;
-  --danger-surface: 0 84% 96%;
+  --danger: 7 64% 49%;
+  --danger-surface: 7 70% 96%;
   --success: 152 60% 27%;
   --success-surface: 152 52% 93%;
   --warning: 28 92% 30%;
   --warning-surface: 40 96% 92%;
-  --info: 211 100% 36%;
-  --info-surface: 211 100% 95%;
+  --info: 217 91% 45%;
+  --info-surface: 214 100% 96%;
 }
 
 .dark {
   color-scheme: dark;
-  --background: 220 20% 7%;
-  --foreground: 210 22% 92%;
-  --surface: 220 17% 10%;
-  --elevated: 220 16% 13%;
-  --glass: 220 18% 14%;
-  --muted: 220 14% 18%;
-  --muted-foreground: 215 15% 70%;
-  --border: 220 12% 24%;
-  --primary: 211 100% 62%;
-  --primary-foreground: 220 40% 8%;
-  --accent: 166 84% 48%;
-  --accent-foreground: 220 30% 6%;
+  --background: 216 43% 8%;
+  --foreground: 210 40% 96%;
+  --foreground-muted: 215 20% 65%;
+  --surface: 222 39% 11%;
+  --surface-subtle: 219 30% 15%;
+  --elevated: 222 39% 11%;
+  --muted: 219 27% 18%;
+  --muted-foreground: 215 20% 65%;
+  --border: 217 19% 23%;
+  --control-border: 215 20% 50%;
+  --primary: 190 63% 53%;
+  --primary-hover: 190 68% 60%;
+  --primary-foreground: 216 43% 8%;
+  --focus-ring: 190 63% 53%;
+  --sidebar: 192 70% 9%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-icon: 193 40% 80%;
+  --sidebar-edge: 193 60% 18%;
+  --sidebar-active: 193 74% 36%;
+  --table-header: 219 27% 15%;
+  --table-header-foreground: 215 20% 74%;
+  --accent: 190 63% 53%;
+  --accent-foreground: 216 43% 8%;
 
   --danger: 0 88% 72%;
   --danger-surface: 0 42% 17%;
@@ -58,11 +85,17 @@
 }
 
 body {
+  min-height: 100dvh;
   margin: 0;
-  background:
-    radial-gradient(circle at 18% 10%, rgba(0, 122, 255, 0.14), transparent 28rem),
-    radial-gradient(circle at 92% 2%, rgba(52, 199, 89, 0.12), transparent 22rem),
-    hsl(var(--background));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv02", "cv03", "cv04";
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.2);
   color: hsl(var(--foreground));
 }
 
@@ -74,7 +107,7 @@ textarea {
 }
 
 .focus-ring {
-  @apply outline-none ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-primary;
+  @apply outline-none ring-offset-1 ring-offset-background focus-visible:ring-2 focus-visible:ring-focus-ring/50;
 }
 
 /* Numeric columns should never jitter as values change. */
@@ -94,10 +127,8 @@ textarea {
 }
 
 .glass-surface {
-  background: color-mix(in srgb, hsl(var(--glass)) 78%, transparent);
-  border-color: color-mix(in srgb, hsl(var(--border)) 68%, transparent);
-  backdrop-filter: blur(22px) saturate(165%);
-  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  background: hsl(var(--surface));
+  border-color: hsl(var(--border));
 }
 
 /*
@@ -151,10 +182,4 @@ textarea {
 .license-datepicker .day-disabled button {
   color: hsl(var(--muted-foreground) / 0.4);
   cursor: not-allowed;
-}
-
-@supports not (background: color-mix(in srgb, white, transparent)) {
-  .glass-surface {
-    background: hsla(var(--glass), 0.9);
-  }
 }

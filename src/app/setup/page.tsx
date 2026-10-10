@@ -10,7 +10,7 @@ export default async function SetupPage() {
   if (userCount > 0) redirect("/login");
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-5">
+    <main className="flex min-h-[100dvh] items-center justify-center bg-background p-4">
       <SetupForm />
     </main>
   );

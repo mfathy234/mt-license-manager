@@ -8,37 +8,49 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  Menu,
   Moon,
-  PanelLeft,
   Settings,
   Sun,
-  Upload,
-  Users
+  UserCog,
+  Users,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { navigationForRole } from "@/lib/presentation";
 import { cn } from "@/lib/utils";
+import { PageReveal } from "@/components/motion/page-reveal";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/licenses", label: "Licenses", icon: KeyRound },
-  { href: "/licenses/import", label: "Import", icon: Upload },
-  { href: "/recipients", label: "Recipients", icon: Mail },
-  { href: "/groups", label: "Groups", icon: Users },
-  { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/users", label: "Users", icon: Users },
-  { href: "/settings/email", label: "Email", icon: Settings },
-  { href: "/settings/lookups", label: "Lookups", icon: Settings }
-];
+const navigationIcons: Record<string, LucideIcon> = {
+  "/dashboard": LayoutDashboard,
+  "/licenses": KeyRound,
+  "/notifications": Bell,
+  "/recipients": Mail,
+  "/groups": Users,
+  "/users": UserCog,
+  "/settings/email": Mail,
+  "/settings/lookups": Settings,
+};
+
+const focusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
 
 type AppShellClientProps = {
   children: React.ReactNode;
   user: {
     name?: string | null;
     email?: string | null;
-    role: string;
+    role: "admin" | "editor" | "viewer";
   };
 };
 
@@ -47,13 +59,84 @@ export function AppShellClient({ children, user }: AppShellClientProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const wasMobileOpen = useRef(false);
 
   useEffect(() => {
     const storedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)",
+    ).matches;
     const enabled = storedTheme ? storedTheme === "dark" : prefersDark;
     setDark(enabled);
     document.documentElement.classList.toggle("dark", enabled);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      drawerRef.current
+        ?.querySelector<HTMLElement>("[data-drawer-initial-focus]")
+        ?.focus();
+    });
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab" || !drawerRef.current) return;
+
+      const focusableElements = Array.from(
+        drawerRef.current.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((element) => element.offsetParent !== null);
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements.at(-1);
+
+      if (!firstElement || !lastElement) return;
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    if (wasMobileOpen.current && !mobileOpen) {
+      mobileMenuButtonRef.current?.focus();
+    }
+    wasMobileOpen.current = mobileOpen;
+  }, [mobileOpen]);
+
+  useEffect(() => {
+    const desktopViewport = window.matchMedia("(min-width: 1024px)");
+
+    function closeDrawerAtDesktop(event: MediaQueryListEvent) {
+      if (event.matches) setMobileOpen(false);
+    }
+
+    desktopViewport.addEventListener("change", closeDrawerAtDesktop);
+    return () =>
+      desktopViewport.removeEventListener("change", closeDrawerAtDesktop);
   }, []);
 
   function toggleDarkMode() {
@@ -65,129 +148,289 @@ export function AppShellClient({ children, user }: AppShellClientProps) {
     });
   }
 
-  const widthClass = collapsed ? "lg:w-[88px]" : "lg:w-[276px]";
+  const navigation = navigationForRole(user.role);
+  const userLabel = user.name || user.email || "Signed-in user";
+  const userInitial =
+    (user.name || user.email || "U").trim().charAt(0).toUpperCase() || "U";
+  const widthClass = collapsed ? "lg:w-16" : "lg:w-60";
+
+  let pageTitle = "License Manager";
+
+  if (pathname === "/dashboard") {
+    pageTitle = "Dashboard";
+  } else if (pathname === "/licenses/import") {
+    pageTitle = "Import licenses";
+  } else if (pathname === "/licenses/new") {
+    pageTitle = "New license";
+  } else if (pathname.endsWith("/edit") && pathname.startsWith("/licenses/")) {
+    pageTitle = "Edit license";
+  } else if (pathname.startsWith("/licenses/")) {
+    pageTitle = "License details";
+  } else if (pathname === "/licenses") {
+    pageTitle = "Licenses";
+  } else if (pathname === "/recipients") {
+    pageTitle = "Recipients";
+  } else if (pathname === "/groups") {
+    pageTitle = "Groups";
+  } else if (pathname === "/notifications") {
+    pageTitle = "Notifications";
+  } else if (pathname === "/users") {
+    pageTitle = "Users";
+  } else if (pathname === "/settings/email") {
+    pageTitle = "Email settings";
+  } else if (pathname === "/settings/lookups") {
+    pageTitle = "Lookups";
+  }
+
+  const itemBase =
+    "focus-ring flex items-center gap-2.5 rounded-md text-sm font-medium ring-offset-sidebar transition-[background-color,color] duration-150";
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100dvh] bg-background">
       {mobileOpen ? (
         <button
-          aria-label="Close sidebar"
-          className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm lg:hidden"
+          type="button"
+          tabIndex={-1}
+          aria-label="Close navigation"
+          className="fixed inset-0 z-backdrop animate-fade-in bg-slate-950/60 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       ) : null}
 
       <aside
+        ref={drawerRef}
+        id="application-navigation"
+        role={mobileOpen ? "dialog" : undefined}
+        aria-modal={mobileOpen || undefined}
+        aria-label="Application navigation"
         className={cn(
-          "glass-surface fixed inset-y-3 left-3 z-40 flex w-[276px] flex-col rounded-2xl border shadow-glass transition-all duration-300",
+          "fixed inset-y-0 left-0 z-modal w-[min(88vw,280px)] flex-col border-r border-sidebar-edge bg-sidebar text-sidebar-foreground shadow-popover transition-[width,transform] duration-200 ease-out-quart lg:z-sticky lg:flex lg:translate-x-0 lg:shadow-none",
           widthClass,
-          mobileOpen ? "translate-x-0" : "-translate-x-[calc(100%+1rem)] lg:translate-x-0"
+          mobileOpen ? "flex translate-x-0" : "hidden -translate-x-full",
         )}
       >
-        <div className="flex h-16 items-center justify-between gap-3 px-3">
-          <Link href="/dashboard" className="focus-ring flex min-w-0 items-center gap-3 rounded-xl px-2 py-2">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/25">
-              M
+        <div className="relative flex h-14 shrink-0 items-center border-b border-sidebar-edge px-3">
+          <Link
+            href="/dashboard"
+            className={cn(
+              "focus-ring flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1.5 ring-offset-sidebar",
+              collapsed && "lg:justify-center",
+            )}
+            onClick={() => setMobileOpen(false)}
+            aria-label={collapsed ? "Microtec License Manager" : undefined}
+            title={collapsed ? "Microtec License Manager" : undefined}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-white">
+              {/* The MFE favicon is the canonical Microtec product mark. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/icon.ico" alt="Microtec" className="h-full w-full" />
             </span>
-            <span className={cn("min-w-0 transition-opacity", collapsed && "lg:pointer-events-none lg:opacity-0")}>
-              <span className="block truncate text-sm font-semibold">Microtec</span>
-              <span className="block truncate text-xs text-muted-foreground">License Manager</span>
+            <span
+              className={cn(
+                "min-w-0 leading-tight transition-opacity duration-150",
+                collapsed && "lg:pointer-events-none lg:w-0 lg:opacity-0",
+              )}
+            >
+              <span className="block truncate text-sm font-semibold text-white">
+                Microtec
+              </span>
+              <span className="block truncate text-xs text-sidebar-foreground/60">
+                License Manager
+              </span>
             </span>
           </Link>
+
           <button
             type="button"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="focus-ring hidden h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-elevated/75 text-muted-foreground transition hover:text-foreground lg:grid"
+            data-drawer-initial-focus
+            aria-label="Close navigation"
+            className="focus-ring grid h-10 w-10 shrink-0 place-items-center rounded-md text-sidebar-foreground/70 ring-offset-sidebar transition-colors duration-150 hover:bg-white/10 hover:text-white lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          >
+            <X aria-hidden className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-expanded={!collapsed}
+            aria-controls="primary-navigation"
+            title={collapsed ? "Expand navigation" : "Collapse navigation"}
+            className={cn(
+              "focus-ring absolute hidden h-7 w-7 place-items-center rounded-md text-sidebar-foreground/70 ring-offset-sidebar transition-colors duration-150 hover:bg-white/10 hover:text-white lg:grid",
+              collapsed
+                ? "-right-3.5 top-3.5 border border-white/10 bg-sidebar"
+                : "right-3 top-3.5",
+            )}
             onClick={() => setCollapsed((value) => !value)}
           >
-            {collapsed ? <ChevronsRight aria-hidden className="h-4 w-4" /> : <ChevronsLeft aria-hidden className="h-4 w-4" />}
+            {collapsed ? (
+              <ChevronsRight aria-hidden className="h-4 w-4" />
+            ) : (
+              <ChevronsLeft aria-hidden className="h-4 w-4" />
+            )}
           </button>
         </div>
 
-        <nav className="grid gap-1 px-3 py-2">
-          {nav.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={collapsed ? item.label : undefined}
-                onClick={() => setMobileOpen(false)}
+        <nav
+          id="primary-navigation"
+          aria-label="Primary navigation"
+          className="min-h-0 flex-1 overflow-y-auto px-2 py-3"
+        >
+          {navigation.map((group, groupIndex) => (
+            <div key={group.label} className={cn(groupIndex > 0 && "mt-4")}>
+              <p
                 className={cn(
-                  "focus-ring group relative flex h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-medium transition",
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                    : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-                  collapsed && "lg:justify-center lg:px-0"
+                  "mb-1 px-2.5 text-xs font-medium text-sidebar-icon/70",
+                  collapsed && "lg:sr-only",
                 )}
               >
-                <Icon aria-hidden className="h-4 w-4 shrink-0" />
-                <span className={cn("truncate transition-opacity", collapsed && "lg:pointer-events-none lg:w-0 lg:opacity-0")}>
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+                {group.label}
+              </p>
+              <div className="grid gap-0.5">
+                {group.items.map((item) => {
+                  const Icon = navigationIcons[item.href] || KeyRound;
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== "/dashboard" &&
+                      pathname.startsWith(`${item.href}/`));
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      aria-label={collapsed ? item.label : undefined}
+                      title={collapsed ? item.label : undefined}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        itemBase,
+                        "group relative min-h-11 px-2.5 lg:min-h-8",
+                        active
+                          ? "bg-sidebar-active text-white"
+                          : "text-sidebar-foreground hover:bg-white/10",
+                        collapsed && "lg:justify-center lg:px-0",
+                      )}
+                    >
+                      {active ? (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-0 left-0 w-1 rounded-l-md bg-sidebar-edge"
+                        />
+                      ) : null}
+                      <Icon
+                        aria-hidden
+                        className={cn(
+                          "h-4 w-4 shrink-0 text-sidebar-icon",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "truncate",
+                          collapsed &&
+                            "lg:pointer-events-none lg:w-0 lg:opacity-0",
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        <div className="mt-auto grid gap-2 p-3">
-          <button
-            type="button"
-            onClick={toggleDarkMode}
+        <div className="relative z-sticky shrink-0 border-t border-sidebar-edge bg-sidebar p-2">
+          <div
             className={cn(
-              "focus-ring flex h-11 items-center gap-3 rounded-xl border border-border bg-elevated/75 px-3 text-sm font-medium text-muted-foreground transition hover:text-foreground",
-              collapsed && "lg:justify-center lg:px-0"
+              "flex min-w-0 items-center gap-2",
+              collapsed && "lg:flex-col",
             )}
-            title={collapsed ? "Toggle dark mode" : undefined}
+            title={collapsed ? `${userLabel} (${user.role})` : undefined}
           >
-            {dark ? <Sun aria-hidden className="h-4 w-4 shrink-0" /> : <Moon aria-hidden className="h-4 w-4 shrink-0" />}
-            <span className={cn("truncate transition-opacity", collapsed && "lg:pointer-events-none lg:w-0 lg:opacity-0")}>
-              {dark ? "Light mode" : "Dark mode"}
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-semibold text-white">
+              {userInitial}
             </span>
-          </button>
-          <Link
-            href="/api/auth/signout"
-            className={cn(
-              "focus-ring flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-muted/80 hover:text-foreground",
-              collapsed && "lg:justify-center lg:px-0"
-            )}
-            title={collapsed ? "Sign out" : undefined}
-          >
-            <LogOut aria-hidden className="h-4 w-4 shrink-0" />
-            <span className={cn("truncate transition-opacity", collapsed && "lg:pointer-events-none lg:w-0 lg:opacity-0")}>Sign out</span>
-          </Link>
+            <span
+              className={cn(
+                "min-w-0 flex-1 leading-tight",
+                collapsed && "lg:hidden",
+              )}
+            >
+              <span className="block truncate text-[13px] font-medium text-white">
+                {userLabel}
+              </span>
+              <span className="block truncate text-xs capitalize text-sidebar-foreground/60">
+                {user.role}
+              </span>
+            </span>
+            <div
+              className={cn(
+                "flex shrink-0 items-center",
+                collapsed && "lg:flex-col",
+              )}
+            >
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                aria-label={
+                  dark ? "Switch to light mode" : "Switch to dark mode"
+                }
+                aria-pressed={dark}
+                title={dark ? "Switch to light mode" : "Switch to dark mode"}
+                className={cn(
+                  itemBase,
+                  "h-10 w-10 justify-center text-sidebar-foreground/75 hover:bg-white/10 hover:text-white lg:h-8 lg:w-8",
+                )}
+              >
+                {dark ? (
+                  <Sun aria-hidden className="h-4 w-4" />
+                ) : (
+                  <Moon aria-hidden className="h-4 w-4" />
+                )}
+              </button>
+              <Link
+                href="/api/auth/signout"
+                aria-label="Sign out"
+                title="Sign out"
+                className={cn(
+                  itemBase,
+                  "h-10 w-10 justify-center text-sidebar-foreground/75 hover:bg-white/10 hover:text-white lg:h-8 lg:w-8",
+                )}
+              >
+                <LogOut aria-hidden className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <div className={cn("transition-[padding] duration-300 lg:pl-[300px]", collapsed && "lg:pl-[112px]")}>
-        <header className="sticky top-0 z-20 border-b border-border/70 bg-background/70 px-4 backdrop-blur-xl">
-          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Open sidebar"
-                className="focus-ring grid h-10 w-10 place-items-center rounded-xl border border-border bg-elevated text-muted-foreground lg:hidden"
-                onClick={() => setMobileOpen(true)}
-              >
-                <PanelLeft aria-hidden className="h-4 w-4" />
-              </button>
-              <div>
-                <p className="text-sm font-semibold">{user.name || user.email}</p>
-                <p className="text-xs uppercase text-muted-foreground">{user.role}</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              aria-label="Toggle dark mode"
-              className="focus-ring grid h-10 w-10 place-items-center rounded-xl border border-border bg-elevated text-muted-foreground transition hover:text-foreground"
-              onClick={toggleDarkMode}
-            >
-              {dark ? <Sun aria-hidden className="h-4 w-4" /> : <Moon aria-hidden className="h-4 w-4" />}
-            </button>
-          </div>
+      <div
+        className={cn(
+          "min-h-[100dvh] min-w-0 transition-[margin,width] duration-200 ease-out-quart lg:ml-60 lg:w-[calc(100%-15rem)]",
+          collapsed && "lg:ml-16 lg:w-[calc(100%-4rem)]",
+        )}
+      >
+        <header className="sticky top-0 z-sticky flex h-12 items-center gap-2 border-b border-border bg-surface px-2 lg:hidden">
+          <button
+            ref={mobileMenuButtonRef}
+            type="button"
+            aria-label="Open navigation"
+            aria-expanded={mobileOpen}
+            aria-controls="application-navigation"
+            className="focus-ring grid h-10 w-10 shrink-0 place-items-center rounded-md text-foreground-muted transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            onClick={() => setMobileOpen(true)}
+          >
+            <Menu aria-hidden className="h-5 w-5" />
+          </button>
+          <p className="min-w-0 truncate text-sm font-semibold text-foreground">
+            {pageTitle}
+          </p>
         </header>
-        <main className="mx-auto w-full max-w-7xl p-5 lg:p-8">{children}</main>
+        <main className="min-w-0 w-full p-4 lg:px-8 lg:py-6 2xl:px-10">
+          <PageReveal>{children}</PageReveal>
+        </main>
       </div>
     </div>
   );

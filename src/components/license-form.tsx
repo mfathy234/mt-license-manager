@@ -8,6 +8,10 @@ import { useRouter } from "next/navigation";
 import { ModernMultiSelect, ModernSelect } from "@/components/modern-select";
 import { Button, Field, FormMessage, TextareaField } from "@/components/ui";
 import { getErrorMessage, requestJson } from "@/lib/http";
+import {
+  licenseFormFieldErrors,
+  type LicenseFormFieldErrors,
+} from "@/lib/presentation";
 import { cn, toDateInputValue, toDateOnlyInput } from "@/lib/utils";
 
 /**
@@ -28,26 +32,56 @@ type LicenseFormProps = {
   lookupOptions?: Record<string, Array<{ id: string; value: string }>>;
 };
 
-export function LicenseForm({ action, license, adminOptions = [], lookupOptions = {} }: LicenseFormProps) {
+export function LicenseForm({
+  action,
+  license,
+  adminOptions = [],
+  lookupOptions = {},
+}: LicenseFormProps) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<LicenseFormFieldErrors>({});
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!fieldErrors.details) return;
+    const details = formRef.current?.elements.namedItem("details");
+    if (details instanceof HTMLElement) details.focus();
+  }, [fieldErrors.details]);
+
+  function handleInvalid(event: React.InvalidEvent<HTMLFormElement>) {
+    const control = event.target;
+    if (!(control instanceof HTMLInputElement) || control.name !== "details") {
+      return;
+    }
+
+    event.preventDefault();
+    setError("");
+    setFieldErrors(licenseFormFieldErrors({ details: control.value }));
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    setSaving(true);
     setError("");
 
     const data = {
       ...Object.fromEntries(formData),
-      adminIds: formData.getAll("adminIds").map(String)
+      adminIds: formData.getAll("adminIds").map(String),
     };
+    const nextFieldErrors = licenseFormFieldErrors({
+      details: formData.get("details"),
+    });
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) return;
+
+    setSaving(true);
 
     try {
       const payload = await requestJson<{ license: { id: string } }>(
         action === "create" ? "/api/licenses" : `/api/licenses/${license?.id}`,
-        { method: action === "create" ? "POST" : "PUT", body: data }
+        { method: action === "create" ? "POST" : "PUT", body: data },
       );
       // `refresh()` fired straight after `push()` invalidates the router cache
       // mid-transition and strands the navigation, leaving the button stuck on
@@ -76,38 +110,105 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
   const dateValue = (key: string) => toDateOnlyInput(license?.[key]);
 
   return (
-    <form onSubmit={submit} className="grid gap-5">
-      <FormSection title="Identity" description="What the subscription is and who it belongs to.">
-        <Field label="Details" name="details" defaultValue={value("details")} required className="lg:col-span-2" />
-        <ModernSelect label="Status" name="status" value={value("status")} options={toSelectOptions(lookupOptions.status)} />
+    <form
+      ref={formRef}
+      onSubmit={submit}
+      onInvalid={handleInvalid}
+      className="grid divide-y divide-border"
+    >
+      <FormSection
+        title="License identity"
+        description="What the subscription is and how it is classified."
+        columns="lg:grid-cols-3"
+      >
+        <Field
+          label="Details"
+          name="details"
+          defaultValue={value("details")}
+          error={fieldErrors.details}
+          required
+          className="lg:col-span-2"
+        />
+        <Field label="Vendor" name="vendor" defaultValue={value("vendor")} />
         <ModernSelect
+          placeholder="Select…"
+          label="Status"
+          name="status"
+          value={value("status")}
+          options={toSelectOptions(lookupOptions.status)}
+        />
+        <ModernSelect
+          placeholder="Select…"
           label="Service type"
           name="serviceType"
           value={value("serviceType")}
           options={toSelectOptions(lookupOptions.serviceType)}
         />
-        <ModernSelect label="Branch" name="branch" value={value("branch")} options={toSelectOptions(lookupOptions.branch)} />
-        <Field label="Vendor" name="vendor" defaultValue={value("vendor")} />
-        <Field label="Users count" name="usersCount" type="number" min="0" defaultValue={value("usersCount")} />
-        <Field label="Owner account" name="ownerAccount" defaultValue={value("ownerAccount")} />
-        <ModernMultiSelect
-          label="Admins"
-          name="adminIds"
-          options={adminOptions.map((admin) => ({ value: admin.id, label: admin.name }))}
-          selectedValues={Array.isArray(license?.adminIds) ? (license.adminIds as string[]) : []}
+        <ModernSelect
+          placeholder="Select…"
+          label="Branch"
+          name="branch"
+          value={value("branch")}
+          options={toSelectOptions(lookupOptions.branch)}
         />
       </FormSection>
 
-      <FormSection title="Term" description="Dates and how the subscription renews.">
-        <DatePickerField label="Start date" name="startDate" initialValue={dateValue("startDate")} />
-        <DatePickerField label="Expiry date" name="expiryDate" initialValue={dateValue("expiryDate")} />
+      <FormSection
+        title="Ownership"
+        description="Who is accountable and how many seats."
+        columns="lg:grid-cols-3"
+      >
+        <Field
+          label="Owner account"
+          name="ownerAccount"
+          defaultValue={value("ownerAccount")}
+        />
+        <ModernMultiSelect
+          label="Admins"
+          name="adminIds"
+          options={adminOptions.map((admin) => ({
+            value: admin.id,
+            label: admin.name,
+          }))}
+          selectedValues={
+            Array.isArray(license?.adminIds)
+              ? (license.adminIds as string[])
+              : []
+          }
+        />
+        <Field
+          label="Users count"
+          name="usersCount"
+          type="number"
+          min="0"
+          defaultValue={value("usersCount")}
+        />
+      </FormSection>
+
+      <FormSection
+        title="Term and renewal"
+        description="Contract dates, payment, and renewal cycle."
+        columns="lg:grid-cols-4"
+      >
+        <DatePickerField
+          label="Start date"
+          name="startDate"
+          initialValue={dateValue("startDate")}
+        />
+        <DatePickerField
+          label="Expiry date"
+          name="expiryDate"
+          initialValue={dateValue("expiryDate")}
+        />
         <ModernSelect
+          placeholder="Select…"
           label="Payment method"
           name="paymentMethod"
           value={value("paymentMethod")}
           options={toSelectOptions(lookupOptions.paymentMethod)}
         />
         <ModernSelect
+          placeholder="Select…"
           label="Renewal frequency"
           name="renewalFrequency"
           value={value("renewalFrequency")}
@@ -115,7 +216,11 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
         />
       </FormSection>
 
-      <FormSection title="Cost" description="Leave blank where a currency does not apply.">
+      <FormSection
+        title="Costs"
+        description="Contracted amounts in EGP and USD."
+        columns="lg:grid-cols-3"
+      >
         <Field
           label="Monthly EGP"
           name="monthlyCostEgp"
@@ -123,8 +228,20 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
           step="0.01"
           defaultValue={value("monthlyCostEgp") || value("costEgp")}
         />
-        <Field label="Yearly EGP" name="yearlyCostEgp" type="number" step="0.01" defaultValue={value("yearlyCostEgp")} />
-        <Field label="5 years EGP" name="fiveYearsCostEgp" type="number" step="0.01" defaultValue={value("fiveYearsCostEgp")} />
+        <Field
+          label="Yearly EGP"
+          name="yearlyCostEgp"
+          type="number"
+          step="0.01"
+          defaultValue={value("yearlyCostEgp")}
+        />
+        <Field
+          label="5 years EGP"
+          name="fiveYearsCostEgp"
+          type="number"
+          step="0.01"
+          defaultValue={value("fiveYearsCostEgp")}
+        />
         <Field
           label="Monthly USD"
           name="monthlyCostUsd"
@@ -132,17 +249,45 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
           step="0.01"
           defaultValue={value("monthlyCostUsd") || value("costUsd")}
         />
-        <Field label="Yearly USD" name="yearlyCostUsd" type="number" step="0.01" defaultValue={value("yearlyCostUsd")} />
-        <Field label="5 years USD" name="fiveYearsCostUsd" type="number" step="0.01" defaultValue={value("fiveYearsCostUsd")} />
+        <Field
+          label="Yearly USD"
+          name="yearlyCostUsd"
+          type="number"
+          step="0.01"
+          defaultValue={value("yearlyCostUsd")}
+        />
+        <Field
+          label="5 years USD"
+          name="fiveYearsCostUsd"
+          type="number"
+          step="0.01"
+          defaultValue={value("fiveYearsCostUsd")}
+        />
       </FormSection>
 
-      <FormSection title="Notes">
-        <TextareaField label="Notes" name="notes" defaultValue={value("notes")} className="lg:col-span-2" />
+      <FormSection title="Notes" columns="sm:grid-cols-1">
+        <TextareaField
+          label="Notes"
+          name="notes"
+          defaultValue={value("notes")}
+        />
       </FormSection>
 
-      {error ? <FormMessage tone="danger">{error}</FormMessage> : null}
+      {error ? (
+        <div className="px-4 py-3">
+          <FormMessage tone="danger">{error}</FormMessage>
+        </div>
+      ) : null}
 
-      <div className="flex justify-end border-t border-border pt-5">
+      <div className="sticky bottom-0 z-sticky flex justify-end gap-2 rounded-b-lg bg-surface/95 px-4 py-3 backdrop-blur">
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={saving}
+          onClick={() => router.push("/licenses")}
+        >
+          Cancel
+        </Button>
         <Button loading={saving}>
           {saving ? null : <Save aria-hidden className="h-4 w-4" />}
           {saving ? "Saving..." : "Save license"}
@@ -155,31 +300,52 @@ export function LicenseForm({ action, license, adminOptions = [], lookupOptions 
 function FormSection({
   title,
   description,
-  children
+  columns,
+  children,
 }: {
   title: string;
   description?: string;
+  columns: string;
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="grid gap-4">
+    <fieldset className="grid gap-3 px-4 py-4 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-x-8">
       <legend className="sr-only">{title}</legend>
-      <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+        {description ? (
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">{children}</div>
+      <div className={cn("grid gap-x-4 gap-y-3 sm:grid-cols-2", columns)}>
+        {children}
+      </div>
     </fieldset>
   );
 }
 
 function toSelectOptions(options: Array<{ id: string; value: string }> = []) {
-  return options.map((option) => ({ value: option.value, label: option.value }));
+  return options.map((option) => ({
+    value: option.value,
+    label: option.value,
+  }));
 }
 
-function DatePickerField({ label, name, initialValue }: { label: string; name: string; initialValue?: string }) {
+function DatePickerField({
+  label,
+  name,
+  initialValue,
+}: {
+  label: string;
+  name: string;
+  initialValue?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Date | undefined>(() => parseDateInput(initialValue));
+  const [selected, setSelected] = useState<Date | undefined>(() =>
+    parseDateInput(initialValue),
+  );
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Re-sync when the server sends a different stored date (e.g. after a save
@@ -207,37 +373,39 @@ function DatePickerField({ label, name, initialValue }: { label: string; name: s
   }, [open]);
 
   const isoValue = selected ? toDateInputValue(selected) : "";
-  const displayValue = selected ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(selected) : "";
+  const displayValue = selected
+    ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(selected)
+    : "";
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative grid gap-1" ref={containerRef}>
       <input type="hidden" name={name} value={isoValue} />
+      <span className="text-xs font-medium text-foreground-muted">{label}</span>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="dialog"
         aria-expanded={open}
         className={cn(
-          "focus-ring group relative flex h-14 w-full items-center justify-between gap-3 rounded-xl border bg-elevated/80 px-4 pb-2 pt-6 text-left text-sm shadow-sm transition duration-150 ease-out-quart hover:border-primary/40",
-          open ? "border-primary/60" : "border-border"
+          "focus-ring group flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-surface px-3 text-left text-sm transition-colors duration-150 ease-out-quart hover:border-primary/50 lg:h-9",
+          open ? "border-primary" : "border-control-border",
         )}
       >
-        <span className={cn("truncate", !displayValue && "text-muted-foreground")}>{displayValue || "Select a date"}</span>
-        <CalendarDays aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-primary" />
         <span
-          className={cn(
-            "pointer-events-none absolute left-4 top-2 text-xs font-medium transition-colors",
-            open ? "text-primary" : "text-muted-foreground"
-          )}
+          className={cn("truncate", !displayValue && "text-muted-foreground")}
         >
-          {label}
+          {displayValue || "Select a date"}
         </span>
+        <CalendarDays
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-primary"
+        />
       </button>
       {open ? (
         <div
           role="dialog"
           aria-label={label}
-          className="glass-surface absolute left-0 top-16 z-dropdown rounded-2xl border p-3 shadow-popover"
+          className="glass-surface absolute left-0 top-full z-dropdown mt-1 rounded-xl border p-3 shadow-popover"
         >
           <DayPicker
             mode="single"
@@ -259,30 +427,33 @@ function DatePickerField({ label, name, initialValue }: { label: string; name: s
               month_caption: "flex items-center gap-2 pb-1 pr-[80px]",
               dropdowns: "flex items-center gap-2",
               dropdown_root: "relative inline-flex",
-              dropdown: "absolute inset-0 h-full w-full cursor-pointer opacity-0",
+              dropdown:
+                "absolute inset-0 h-full w-full cursor-pointer opacity-0",
               caption_label:
-                "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-elevated px-3 text-sm font-medium",
+                "inline-flex h-9 items-center gap-1 rounded-md border border-border bg-elevated px-3 text-sm font-medium",
               chevron: "h-4 w-4 shrink-0 fill-current",
               nav: "absolute right-0 top-0 flex gap-1",
               button_previous:
-                "focus-ring grid h-9 w-9 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
+                "focus-ring grid h-9 w-9 place-items-center rounded-md border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
               button_next:
-                "focus-ring grid h-9 w-9 place-items-center rounded-lg border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
-              weekdays: "grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground",
+                "focus-ring grid h-9 w-9 place-items-center rounded-md border border-border bg-elevated text-muted-foreground transition hover:text-foreground disabled:opacity-40",
+              weekdays:
+                "grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground",
               weekday: "h-7 font-medium leading-7",
               week: "grid grid-cols-7 gap-1",
               day: "h-9 w-9",
-              day_button: "focus-ring h-9 w-9 rounded-lg text-sm transition hover:bg-muted",
+              day_button:
+                "focus-ring h-9 w-9 rounded-md text-sm transition hover:bg-muted",
               selected: "day-selected",
               today: "day-today",
               outside: "day-outside",
-              disabled: "day-disabled"
+              disabled: "day-disabled",
             }}
           />
           <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
             <button
               type="button"
-              className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="focus-ring rounded-md px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
               onClick={() => setSelected(undefined)}
             >
               Clear
@@ -290,7 +461,7 @@ function DatePickerField({ label, name, initialValue }: { label: string; name: s
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                className="focus-ring rounded-md px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 onClick={() => {
                   setSelected(new Date());
                   setOpen(false);
@@ -300,7 +471,7 @@ function DatePickerField({ label, name, initialValue }: { label: string; name: s
               </button>
               <button
                 type="button"
-                className="focus-ring rounded-lg px-3 py-2 text-xs font-medium text-primary transition hover:bg-muted"
+                className="focus-ring rounded-md px-3 py-2 text-xs font-medium text-primary transition hover:bg-muted"
                 onClick={() => setOpen(false)}
               >
                 Done

@@ -1,16 +1,10 @@
 import type { ReactNode } from "react";
 
+import type { PresentationTone } from "@/lib/presentation";
+import { toneClassName } from "@/lib/presentation";
 import { cn } from "@/lib/utils";
 
-export type Tone = "neutral" | "success" | "warning" | "danger" | "info";
-
-const toneClasses: Record<Tone, string> = {
-  neutral: "border-border bg-muted text-muted-foreground",
-  success: "border-success/25 bg-success-surface text-success",
-  warning: "border-warning/25 bg-warning-surface text-warning",
-  danger: "border-danger/25 bg-danger-surface text-danger",
-  info: "border-info/25 bg-info-surface text-info"
-};
+export type Tone = PresentationTone;
 
 /**
  * Status words come from user-managed lookups, so the tone is inferred from the
@@ -35,7 +29,7 @@ const toneByValue: Record<string, Tone> = {
   canceled: "neutral",
   disabled: "danger",
   expired: "danger",
-  failed: "danger"
+  failed: "danger",
 };
 
 export function toneForValue(value?: string | null): Tone {
@@ -46,7 +40,7 @@ export function toneForValue(value?: string | null): Tone {
 export function StatusPill({
   value,
   tone,
-  className
+  className,
 }: {
   value?: string | null;
   tone?: Tone;
@@ -56,9 +50,9 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium capitalize",
-        toneClasses[resolved],
-        className
+        "inline-flex items-center whitespace-nowrap rounded-md border px-1.5 py-0.5 text-xs font-medium",
+        toneClassName(resolved),
+        className,
       )}
     >
       {value?.replace(/_/g, " ") || "Not set"}
@@ -70,7 +64,7 @@ export function EmptyState({
   icon,
   title,
   description,
-  action
+  action,
 }: {
   icon?: ReactNode;
   title: string;
@@ -78,25 +72,36 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="mx-auto grid max-w-md justify-items-center gap-2 text-center">
+    <div className="mx-auto grid max-w-sm justify-items-center gap-1 text-center">
       {icon ? (
-        <span className="mb-1 grid h-11 w-11 place-items-center rounded-xl border border-border bg-muted text-muted-foreground">
+        <span className="mb-1 grid h-8 w-8 place-items-center rounded-md bg-muted text-muted-foreground [&>svg]:h-4 [&>svg]:w-4">
           {icon}
         </span>
       ) : null}
-      <p className="font-medium">{title}</p>
-      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
-      {action ? <div className="mt-2">{action}</div> : null}
+      <p className="text-sm font-medium">{title}</p>
+      {description ? (
+        <p className="text-[13px] text-muted-foreground">{description}</p>
+      ) : null}
+      {action ? <div className="mt-1.5">{action}</div> : null}
     </div>
   );
 }
 
-export function FormMessage({ tone, children }: { tone: Tone; children: ReactNode }) {
+export function FormMessage({
+  tone,
+  children,
+}: {
+  tone: Tone;
+  children: ReactNode;
+}) {
   if (!children) return null;
   return (
     <p
       role={tone === "danger" ? "alert" : "status"}
-      className={cn("rounded-xl border px-3 py-2 text-sm font-medium", toneClasses[tone])}
+      className={cn(
+        "rounded-md border px-3 py-2 text-[13px] font-medium",
+        toneClassName(tone),
+      )}
     >
       {children}
     </p>

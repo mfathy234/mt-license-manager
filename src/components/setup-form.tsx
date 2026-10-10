@@ -29,10 +29,14 @@ export function SetupForm() {
   }
 
   return (
-    <Panel className="w-full max-w-md">
-      <h1 className="text-xl font-semibold">First admin setup</h1>
+    <Panel className="w-full max-w-sm" bodyClassName="p-6">
+      <span className="mb-4 grid h-10 w-10 place-items-center overflow-hidden rounded-md border border-border bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.ico" alt="Microtec" className="h-full w-full" />
+      </span>
+      <h1 className="text-xl font-semibold tracking-tight">First admin setup</h1>
       <p className="mt-1 text-sm text-muted-foreground">This account gets full access to every license and setting.</p>
-      <form onSubmit={submit} noValidate className="mt-6 grid gap-4">
+      <form onSubmit={submit} noValidate className="mt-5 grid gap-3">
         <Field label="Name" name="name" autoComplete="name" required />
         <Field label="Email" name="email" type="email" autoComplete="email" required />
         <Field

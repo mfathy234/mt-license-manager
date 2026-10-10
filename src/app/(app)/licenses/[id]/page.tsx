@@ -1,22 +1,22 @@
-import { Bell, KeyRound } from "lucide-react";
-import { getServerSession } from "next-auth";
+import { Bell, LockKeyhole } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { LicenseDeleteButton } from "@/components/license-delete-button";
 import { LicenseForm } from "@/components/license-form";
-import { EmptyState, PageHeader, Panel, StatCard, StatusPill } from "@/components/ui";
-import { authOptions } from "@/lib/auth";
+import { EmptyState, PageHeader, Panel, StatusPill } from "@/components/ui";
 import { decryptLicense, toLicenseFormValues } from "@/lib/license-secure";
-import { can } from "@/lib/permissions";
 import { getLicenseFormOptions } from "@/lib/lookups";
+import { requirePageSession } from "@/lib/page-auth";
+import { can } from "@/lib/permissions";
+import { licenseSummaryItems, notificationKindLabel } from "@/lib/presentation";
 import { prisma } from "@/lib/prisma";
-import { expiryBadge, formatDate, formatMoney } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 type Props = { params: Promise<{ id: string }> };
 
 export default async function LicenseDetailPage({ params }: Props) {
+  const session = await requirePageSession();
   const { id } = await params;
-  const session = await getServerSession(authOptions);
   const [license, formOptions] = await Promise.all([
     prisma.license.findUnique({
       where: { id },
@@ -24,68 +24,128 @@ export default async function LicenseDetailPage({ params }: Props) {
         encryptedData: true,
         adminAssignments: { include: { admin: true } },
         credentials: { select: { id: true, label: true, updatedAt: true } },
-        histories: { orderBy: { createdAt: "desc" }, take: 10 }
-      }
+        histories: { orderBy: { createdAt: "desc" }, take: 10 },
+      },
     }),
-    getLicenseFormOptions()
+    getLicenseFormOptions(),
   ]);
   if (!license) notFound();
 
   const decrypted = decryptLicense(license);
-  const badge = expiryBadge(decrypted.expiryDate);
-  const subtitle = [decrypted.branch, decrypted.vendor].filter(Boolean).join(" · ");
+  const subtitle = [decrypted.serviceType, decrypted.branch, decrypted.vendor]
+    .filter(Boolean)
+    .join(" · ");
+  const summaryItems = licenseSummaryItems({
+    status: decrypted.status,
+    expiryDate: decrypted.expiryDate,
+    adminsDisplay: decrypted.adminsDisplay,
+    annualCost: (decrypted.yearlyCostUsd ?? decrypted.costUsd)?.toString(),
+  });
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <PageHeader
         title={decrypted.details}
-        description={subtitle || "No branch or vendor recorded"}
+        description={subtitle || "No service, branch, or vendor recorded"}
         actions={
-          <>
-            <StatusPill value={decrypted.status} />
-            {can(session?.user?.role, "license:delete") ? (
-              <LicenseDeleteButton
-                licenseId={decrypted.id}
-                licenseName={decrypted.details}
-                redirectTo="/licenses"
-              />
-            ) : null}
-          </>
+          can(session?.user?.role, "license:delete") ? (
+            <LicenseDeleteButton
+              licenseId={decrypted.id}
+              licenseName={decrypted.details}
+              redirectTo="/licenses"
+            />
+          ) : null
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Expiry" value={formatDate(decrypted.expiryDate)} hint={badge?.label} />
-        <StatCard label="Renewal" value={decrypted.renewalFrequency || "—"} />
-        <StatCard label="Users" value={decrypted.usersCount ?? "—"} hint={`Started ${formatDate(decrypted.startDate)}`} />
-        <StatCard label="Yearly USD" value={formatMoney(decrypted.yearlyCostUsd ?? decrypted.costUsd, "USD")} />
-        <StatCard label="Admins" value={decrypted.adminsDisplay || "—"} />
-      </div>
+      <Panel bodyClassName="p-0">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 lg:grid-cols-4">
+          {summaryItems.map((item) => (
+            <div key={item.label} className="min-w-0">
+              <dt className="text-xs font-medium text-foreground-muted">
+                {item.label}
+              </dt>
+              <dd className="mt-1 min-w-0 text-sm font-medium">
+                {item.label === "Status" || item.label === "Renewal" ? (
+                  <StatusPill value={item.value} tone={item.tone} />
+                ) : (
+                  <span className="tabular block truncate" title={item.value}>
+                    {item.value}
+                  </span>
+                )}
+              </dd>
+            </div>
+          ))}
+          <SummaryDetail label="Owner account" value={decrypted.ownerAccount} />
+          <SummaryDetail
+            label="Start date"
+            value={formatDate(decrypted.startDate)}
+            tabular
+          />
+          <SummaryDetail
+            label="Expiry date"
+            value={formatDate(decrypted.expiryDate)}
+            tabular
+          />
+          <SummaryDetail
+            label="Licensed users"
+            value={decrypted.usersCount?.toString()}
+            tabular
+          />
+        </dl>
+      </Panel>
 
-      <Panel title="Edit license">
+      <Panel title="Edit license" bodyClassName="p-0">
         <LicenseForm
           action="update"
-          license={toLicenseFormValues(decrypted as unknown as Record<string, unknown>)}
+          license={toLicenseFormValues(
+            decrypted as unknown as Record<string, unknown>,
+          )}
           adminOptions={formOptions.admins}
           lookupOptions={formOptions.lookupOptions}
         />
       </Panel>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <Panel
           title="Credentials"
-          actions={<KeyRound aria-hidden className="h-4 w-4 text-muted-foreground" />}
+          description="Values stay masked; only metadata is shown."
+          bodyClassName="p-0"
         >
           {decrypted.credentials.length === 0 ? (
-            <div className="py-6">
-              <EmptyState title="No credentials stored" description="Stored credentials stay encrypted at rest." />
+            <div className="px-4 py-6">
+              <EmptyState
+                icon={<LockKeyhole aria-hidden className="h-4 w-4" />}
+                title="No credentials stored"
+                description="Stored credentials stay encrypted at rest."
+              />
             </div>
           ) : (
-            <ul className="grid gap-2">
+            <ul className="divide-y divide-border">
               {decrypted.credentials.map((credential) => (
-                <li key={credential.id} className="rounded-xl border border-border px-4 py-3 text-sm">
-                  <p className="font-medium">{credential.label}</p>
-                  <p className="text-xs text-muted-foreground">Updated {formatDate(credential.updatedAt)}</p>
+                <li
+                  key={credential.id}
+                  className="flex items-center gap-3 px-4 py-3"
+                >
+                  <LockKeyhole
+                    aria-hidden
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate text-sm font-medium"
+                      title={credential.label}
+                    >
+                      {credential.label}
+                    </p>
+                    <p className="font-mono text-sm tracking-[0.18em] text-muted-foreground">
+                      <span aria-hidden>••••••••••</span>
+                      <span className="sr-only">Credential value masked</span>
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    Updated {formatDate(credential.updatedAt)}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -94,29 +154,93 @@ export default async function LicenseDetailPage({ params }: Props) {
 
         <Panel
           title="Notification history"
-          actions={<Bell aria-hidden className="h-4 w-4 text-muted-foreground" />}
+          description="Most recent first."
+          bodyClassName="p-0"
         >
           {decrypted.histories.length === 0 ? (
-            <div className="py-6">
-              <EmptyState title="No notifications sent" description="Messages for this license will appear here." />
+            <div className="px-4 py-6">
+              <EmptyState
+                icon={<Bell aria-hidden className="h-4 w-4" />}
+                title="No notifications sent"
+                description="Messages for this license will appear here."
+              />
             </div>
           ) : (
-            <ul className="grid gap-2">
-              {decrypted.histories.map((history) => (
-                <li key={history.id} className="rounded-xl border border-border px-4 py-3 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="min-w-0 truncate font-medium">{history.subject}</p>
-                    <StatusPill value={history.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {history.recipient} · {formatDate(history.createdAt)}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <ol className="divide-y divide-border">
+              {decrypted.histories.map((history) => {
+                const timestamp = history.sentAt ?? history.createdAt;
+
+                return (
+                  <li key={history.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 text-sm font-medium">
+                        {history.subject}
+                      </p>
+                      <StatusPill value={history.status} />
+                    </div>
+                    <dl className="mt-2 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+                      <HistoryDetail
+                        label="Kind"
+                        value={notificationKindLabel(history.kind)}
+                      />
+                      <HistoryDetail
+                        label="Recipient"
+                        value={history.recipient}
+                      />
+                      <div className="min-w-0">
+                        <dt className="text-xs font-medium text-muted-foreground">
+                          Timestamp
+                        </dt>
+                        <dd className="tabular mt-0.5 text-sm">
+                          <time dateTime={timestamp.toISOString()}>
+                            {new Intl.DateTimeFormat("en", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }).format(timestamp)}
+                          </time>
+                        </dd>
+                      </div>
+                    </dl>
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </Panel>
       </div>
+    </div>
+  );
+}
+
+function SummaryDetail({
+  label,
+  value,
+  tabular = false,
+}: {
+  label: string;
+  value?: string | null;
+  tabular?: boolean;
+}) {
+  const display = value || "Not set";
+
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-foreground-muted">{label}</dt>
+      <dd
+        className={`mt-1 truncate text-sm font-medium ${tabular ? "tabular" : ""}`}
+        title={display}
+      >
+        {display}
+      </dd>
+    </div>
+  );
+}
+
+function HistoryDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-foreground-muted">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm">{value}</dd>
     </div>
   );
 }

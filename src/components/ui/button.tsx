@@ -8,20 +8,22 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const base =
-  "focus-ring inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium transition duration-150 ease-out-quart disabled:pointer-events-none disabled:opacity-45 motion-safe:active:translate-y-px";
+  "focus-ring inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out-quart disabled:pointer-events-none disabled:opacity-45 motion-safe:active:scale-[0.98]";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-primary-foreground shadow-sm shadow-primary/25 hover:bg-primary/90",
-  secondary: "border border-border bg-elevated text-foreground hover:border-primary/40 hover:bg-muted",
-  ghost: "text-muted-foreground hover:bg-muted hover:text-foreground",
-  danger: "bg-danger text-white shadow-sm shadow-danger/25 hover:bg-danger/90"
+  primary:
+    "bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover",
+  secondary:
+    "border border-border bg-surface text-foreground hover:bg-muted",
+  ghost: "text-foreground-muted hover:bg-muted hover:text-foreground",
+  danger: "bg-danger text-white shadow-sm hover:bg-danger/90",
 };
 
-/** `lg` matches the 56px form-control height so buttons can sit inline with fields. */
+/** Heights match the form controls (h-10 touch, h-9 at lg) so buttons sit inline with fields. */
 const sizes: Record<ButtonSize, string> = {
-  sm: "h-9 gap-1.5 rounded-lg px-3 text-sm",
-  md: "h-11 gap-2 rounded-xl px-4 text-sm",
-  lg: "h-14 gap-2 rounded-xl px-5 text-sm"
+  sm: "h-9 gap-1.5 rounded-md px-3 text-sm lg:h-8",
+  md: "h-10 gap-2 rounded-md px-3.5 text-sm lg:h-9",
+  lg: "h-11 gap-2 rounded-md px-4 text-sm lg:h-10",
 };
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -48,13 +50,18 @@ export function Button({
       aria-busy={loading || undefined}
       {...props}
     >
-      {loading ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+      {loading ? (
+        <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
+      ) : null}
       {children}
     </button>
   );
 }
 
-export function SecondaryButton({ className, ...props }: Omit<ButtonProps, "variant">) {
+export function SecondaryButton({
+  className,
+  ...props
+}: Omit<ButtonProps, "variant">) {
   return <Button variant="secondary" className={className} {...props} />;
 }
 
@@ -63,7 +70,7 @@ export function LinkButton({
   children,
   variant = "primary",
   size = "md",
-  className
+  className,
 }: {
   href: string;
   children: ReactNode;
@@ -72,13 +79,16 @@ export function LinkButton({
   className?: string;
 }) {
   return (
-    <Link href={href} className={cn(base, variants[variant], sizes[size], className)}>
+    <Link
+      href={href}
+      className={cn(base, variants[variant], sizes[size], className)}
+    >
       {children}
     </Link>
   );
 }
 
-/** Compact square button for icon-only affordances; still meets the 44px touch target at `md`. */
+/** Compact square button for icon-only affordances; 40px on touch, 36px at lg. */
 export function IconButton({
   label,
   className,
@@ -92,7 +102,7 @@ export function IconButton({
       type={type}
       aria-label={label}
       title={label}
-      className={cn(base, variants[variant], "h-11 w-11 rounded-xl", className)}
+      className={cn(base, variants[variant], "h-10 w-10 rounded-md lg:h-9 lg:w-9", className)}
       {...props}
     >
       {children}

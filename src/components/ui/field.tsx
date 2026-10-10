@@ -1,51 +1,69 @@
 "use client";
 
 import { useId } from "react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type {
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * One field vocabulary for the whole app: 56px tall, 12px radius, label floating
- * inside the control. Every form surface uses these instead of hand-rolled inputs.
+ * One field vocabulary for the whole app: label above, 40px control on touch
+ * and 36px at lg, hairline border with a teal focus ring.
  */
 const controlBase =
-  "focus-ring peer w-full rounded-xl border bg-elevated/80 px-4 text-sm shadow-sm transition duration-150 ease-out-quart placeholder:text-muted-foreground/70 hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60";
+  "focus-ring w-full rounded-md border bg-surface px-3 text-sm transition-[border-color,box-shadow] duration-150 ease-out-quart placeholder:text-muted-foreground/70 hover:border-primary/50 focus:border-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60";
 
-const labelBase =
-  "pointer-events-none absolute left-4 z-10 max-w-[calc(100%-2rem)] truncate font-medium transition-all duration-150 ease-out-quart";
+const controlHeight = "h-10 lg:h-9";
 
 function borderTone(error?: string) {
-  return error ? "border-danger hover:border-danger" : "border-border";
-}
-
-function labelTone(error?: string) {
-  return error ? "text-danger" : "text-muted-foreground peer-focus:text-primary";
+  return error ? "border-danger hover:border-danger" : "border-control-border";
 }
 
 type FieldChromeProps = {
   label: string;
+  htmlFor: string;
   hint?: string;
   error?: string;
   required?: boolean;
   className?: string;
   children: ReactNode;
-  /** Ids of the hint/error nodes, wired into the control via aria-describedby. */
-  describedBy?: string;
   hintId?: string;
   errorId?: string;
 };
 
-function FieldChrome({ hint, error, className, children, hintId, errorId }: FieldChromeProps) {
+function FieldChrome({
+  label,
+  htmlFor,
+  hint,
+  error,
+  required,
+  className,
+  children,
+  hintId,
+  errorId,
+}: FieldChromeProps) {
   return (
-    <div className={cn("grid gap-1.5", className)}>
+    <div className={cn("grid min-w-0 gap-1", className)}>
+      <label
+        htmlFor={htmlFor}
+        className={cn(
+          "text-xs font-medium",
+          error ? "text-danger" : "text-foreground-muted",
+        )}
+      >
+        <LabelText label={label} required={required} />
+      </label>
       <div className="relative">{children}</div>
       {error ? (
-        <p id={errorId} role="alert" className="px-1 text-xs font-medium text-danger">
+        <p id={errorId} role="alert" className="text-xs font-medium text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={hintId} className="px-1 text-xs text-muted-foreground">
+        <p id={hintId} className="text-xs text-muted-foreground">
           {hint}
         </p>
       ) : null}
@@ -73,7 +91,10 @@ function useFieldIds(hint?: string, error?: string) {
   return { id, hintId, errorId, describedBy: errorId ?? hintId };
 }
 
-export type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className"> & {
+export type FieldProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "className"
+> & {
   label: string;
   hint?: string;
   error?: string;
@@ -82,41 +103,54 @@ export type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className"
   adornment?: ReactNode;
 };
 
-export function Field({ label, hint, error, className, required, adornment, ...props }: FieldProps) {
+export function Field({
+  label,
+  hint,
+  error,
+  className,
+  required,
+  adornment,
+  ...props
+}: FieldProps) {
   const { id, hintId, errorId, describedBy } = useFieldIds(hint, error);
 
   return (
-    <FieldChrome label={label} hint={hint} error={error} className={className} hintId={hintId} errorId={errorId}>
+    <FieldChrome
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      hintId={hintId}
+      errorId={errorId}
+    >
       <input
         id={id}
-        placeholder=" "
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
           controlBase,
+          controlHeight,
           borderTone(error),
-          "h-14 pb-2 pt-6 placeholder:text-transparent",
-          adornment && "pr-12"
+          adornment && "pr-11",
         )}
         {...props}
       />
-      <label
-        htmlFor={id}
-        className={cn(
-          labelBase,
-          labelTone(error),
-          "top-2 text-xs peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-xs"
-        )}
-      >
-        <LabelText label={label} required={required} />
-      </label>
-      {adornment ? <div className="absolute right-2 top-1/2 -translate-y-1/2">{adornment}</div> : null}
+      {adornment ? (
+        <div className="absolute right-1 top-1/2 -translate-y-1/2">
+          {adornment}
+        </div>
+      ) : null}
     </FieldChrome>
   );
 }
 
-export type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "className"> & {
+export type SelectFieldProps = Omit<
+  SelectHTMLAttributes<HTMLSelectElement>,
+  "className"
+> & {
   label: string;
   hint?: string;
   error?: string;
@@ -124,86 +158,135 @@ export type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "cl
   children: ReactNode;
 };
 
-export function SelectField({ label, hint, error, className, required, children, ...props }: SelectFieldProps) {
+export function SelectField({
+  label,
+  hint,
+  error,
+  className,
+  required,
+  children,
+  ...props
+}: SelectFieldProps) {
   const { id, hintId, errorId, describedBy } = useFieldIds(hint, error);
 
   return (
-    <FieldChrome label={label} hint={hint} error={error} className={className} hintId={hintId} errorId={errorId}>
+    <FieldChrome
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      hintId={hintId}
+      errorId={errorId}
+    >
       <select
         id={id}
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={cn(controlBase, borderTone(error), "h-14 appearance-none pb-2 pr-10 pt-6")}
+        className={cn(
+          controlBase,
+          controlHeight,
+          borderTone(error),
+          "appearance-none pr-9",
+        )}
         {...props}
       >
         {children}
       </select>
-      <label htmlFor={id} className={cn(labelBase, labelTone(error), "top-2 text-xs")}>
-        <LabelText label={label} required={required} />
-      </label>
       <svg
         aria-hidden
         viewBox="0 0 20 20"
-        className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
       >
-        <path d="M6 8l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M6 8l4 4 4-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </FieldChrome>
   );
 }
 
-export type TextareaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "className"> & {
+export type TextareaFieldProps = Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "className"
+> & {
   label: string;
   hint?: string;
   error?: string;
   className?: string;
 };
 
-export function TextareaField({ label, hint, error, className, required, ...props }: TextareaFieldProps) {
+export function TextareaField({
+  label,
+  hint,
+  error,
+  className,
+  required,
+  ...props
+}: TextareaFieldProps) {
   const { id, hintId, errorId, describedBy } = useFieldIds(hint, error);
 
   return (
-    <FieldChrome label={label} hint={hint} error={error} className={className} hintId={hintId} errorId={errorId}>
+    <FieldChrome
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      hintId={hintId}
+      errorId={errorId}
+    >
       <textarea
         id={id}
-        placeholder=" "
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={cn(controlBase, borderTone(error), "min-h-28 pb-3 pt-7 placeholder:text-transparent")}
+        className={cn(controlBase, borderTone(error), "min-h-20 py-2")}
         {...props}
       />
-      <label
-        htmlFor={id}
-        className={cn(
-          labelBase,
-          labelTone(error),
-          "top-2 text-xs peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-xs"
-        )}
-      >
-        <LabelText label={label} required={required} />
-      </label>
     </FieldChrome>
   );
 }
 
-export type FileFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "type"> & {
+export type FileFieldProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "className" | "type"
+> & {
   label: string;
   hint?: string;
   error?: string;
   className?: string;
 };
 
-/** File inputs cannot host a floating label, so the label sits above at the same rhythm. */
-export function FileField({ label, hint, error, className, required, ...props }: FileFieldProps) {
+export function FileField({
+  label,
+  hint,
+  error,
+  className,
+  required,
+  ...props
+}: FileFieldProps) {
   const { id, hintId, errorId, describedBy } = useFieldIds(hint, error);
 
   return (
-    <div className={cn("grid gap-1.5", className)}>
-      <label htmlFor={id} className={cn("px-1 text-xs font-medium", error ? "text-danger" : "text-muted-foreground")}>
-        <LabelText label={label} required={required} />
-      </label>
+    <FieldChrome
+      label={label}
+      htmlFor={id}
+      hint={hint}
+      error={error}
+      required={required}
+      className={className}
+      hintId={hintId}
+      errorId={errorId}
+    >
       <input
         id={id}
         type="file"
@@ -211,22 +294,14 @@ export function FileField({ label, hint, error, className, required, ...props }:
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
-          "focus-ring flex h-14 w-full items-center rounded-xl border bg-elevated/80 px-4 text-sm shadow-sm transition duration-150 ease-out-quart hover:border-primary/40",
-          "file:mr-4 file:h-8 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:text-sm file:font-medium file:text-primary-foreground",
-          borderTone(error)
+          controlBase,
+          "flex h-10 items-center py-0 pl-1 lg:h-9",
+          "file:mr-3 file:h-7 file:cursor-pointer file:rounded file:border-0 file:bg-muted file:px-3 file:text-sm file:font-medium file:text-foreground hover:file:bg-border",
+          borderTone(error),
         )}
         {...props}
       />
-      {error ? (
-        <p id={errorId} role="alert" className="px-1 text-xs font-medium text-danger">
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={hintId} className="px-1 text-xs text-muted-foreground">
-          {hint}
-        </p>
-      ) : null}
-    </div>
+    </FieldChrome>
   );
 }
 
@@ -235,19 +310,30 @@ export function Checkbox({
   hint,
   className,
   ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className"> & { label: string; hint?: string; className?: string }) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className"> & {
+  label: string;
+  hint?: string;
+  className?: string;
+}) {
   const id = useId();
   return (
-    <div className={cn("flex min-h-14 items-start gap-3 rounded-xl border border-border bg-elevated/80 px-4 py-3", className)}>
+    <div className={cn("flex min-h-9 items-start gap-2.5 py-1.5", className)}>
       <input
         id={id}
         type="checkbox"
         className="focus-ring mt-0.5 h-4 w-4 shrink-0 accent-[hsl(var(--primary))]"
         {...props}
       />
-      <label htmlFor={id} className="grid gap-0.5 text-sm font-medium leading-tight">
+      <label
+        htmlFor={id}
+        className="grid gap-0.5 text-sm font-medium leading-tight"
+      >
         {label}
-        {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
+        {hint ? (
+          <span className="text-xs font-normal text-muted-foreground">
+            {hint}
+          </span>
+        ) : null}
       </label>
     </div>
   );

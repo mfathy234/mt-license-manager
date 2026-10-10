@@ -1,7 +1,13 @@
 import { Prisma } from "@prisma/client";
-import type { License, LicenseAdmin, LicenseAdminAssignment, LicenseEncryptedData } from "@prisma/client";
+import type {
+  License,
+  LicenseAdmin,
+  LicenseAdminAssignment,
+  LicenseEncryptedData,
+} from "@prisma/client";
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
+import { toDateOnlyInput } from "@/lib/utils";
 
 export type LicensePlainFields = {
   status?: string | null;
@@ -20,7 +26,9 @@ type LicenseWithSecureData = License & {
   adminAssignments?: Array<LicenseAdminAssignment & { admin: LicenseAdmin }>;
 };
 
-export type DecryptedLicense<T extends LicenseWithSecureData = LicenseWithSecureData> = T &
+export type DecryptedLicense<
+  T extends LicenseWithSecureData = LicenseWithSecureData,
+> = T &
   LicensePlainFields & {
     adminIds: string[];
     adminNames: string[];
@@ -32,18 +40,20 @@ export function encryptLicenseFields(fields: LicensePlainFields) {
   return {
     cipher: encrypted.cipher,
     iv: encrypted.iv,
-    tag: encrypted.tag
+    tag: encrypted.tag,
   };
 }
 
-export function decryptLicenseFields(license: LicenseWithSecureData): LicensePlainFields {
+export function decryptLicenseFields(
+  license: LicenseWithSecureData,
+): LicensePlainFields {
   if (license.encryptedData) {
     return JSON.parse(
       decryptSecret({
         cipher: license.encryptedData.cipher,
         iv: license.encryptedData.iv,
-        tag: license.encryptedData.tag
-      })
+        tag: license.encryptedData.tag,
+      }),
     ) as LicensePlainFields;
   }
 
@@ -56,39 +66,76 @@ export function decryptLicenseFields(license: LicenseWithSecureData): LicensePla
     ownerAccount: license.ownerAccount,
     paymentMethod: license.paymentMethod,
     renewalFrequency: license.renewalFrequency,
-    notes: license.notes
+    notes: license.notes,
   };
 }
 
-export function decryptLicense<T extends LicenseWithSecureData>(license: T): DecryptedLicense<T> {
+export function decryptLicense<T extends LicenseWithSecureData>(
+  license: T,
+): DecryptedLicense<T> {
   const plain = decryptLicenseFields(license);
-  const adminNames = license.adminAssignments?.map((assignment) => assignment.admin.name) ?? [];
-  const adminIds = license.adminAssignments?.map((assignment) => assignment.adminId) ?? [];
+  const adminNames =
+    license.adminAssignments?.map((assignment) => assignment.admin.name) ?? [];
+  const adminIds =
+    license.adminAssignments?.map((assignment) => assignment.adminId) ?? [];
 
   return {
     ...license,
     ...plain,
     adminIds,
     adminNames,
-    adminsDisplay: adminNames.join(", ")
+    adminsDisplay: adminNames.join(", "),
   };
 }
 
 /**
- * Flattens a decrypted license into plain values for the client-side form.
- *
- * Prisma returns money columns as `Decimal` class instances, which cannot cross
- * the server/client boundary — Next.js logs "Only plain objects can be passed to
- * Client Components" for every cost field on every render. Stringifying them
- * keeps the values intact and the boundary clean.
+ * Builds the complete and exclusive client boundary for the license form.
+ * Server-only relations and encrypted payloads cannot cross this whitelist.
  */
-export function toLicenseFormValues(license: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(license).map(([key, value]) => [
-      key,
-      Prisma.Decimal.isDecimal(value) ? value.toString() : value
-    ])
-  );
+export function toLicenseFormValues(license: Record<string, unknown>) {
+  return {
+    id: textValue(license.id),
+    details: textValue(license.details),
+    status: optionalTextValue(license.status),
+    serviceType: optionalTextValue(license.serviceType),
+    branch: optionalTextValue(license.branch),
+    vendor: optionalTextValue(license.vendor),
+    usersCount: numberValue(license.usersCount),
+    ownerAccount: optionalTextValue(license.ownerAccount),
+    adminIds: Array.isArray(license.adminIds)
+      ? license.adminIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    startDate: toDateOnlyInput(license.startDate),
+    expiryDate: toDateOnlyInput(license.expiryDate),
+    paymentMethod: optionalTextValue(license.paymentMethod),
+    renewalFrequency: optionalTextValue(license.renewalFrequency),
+    monthlyCostEgp: moneyValue(license.monthlyCostEgp ?? license.costEgp),
+    yearlyCostEgp: moneyValue(license.yearlyCostEgp),
+    fiveYearsCostEgp: moneyValue(license.fiveYearsCostEgp),
+    monthlyCostUsd: moneyValue(license.monthlyCostUsd ?? license.costUsd),
+    yearlyCostUsd: moneyValue(license.yearlyCostUsd),
+    fiveYearsCostUsd: moneyValue(license.fiveYearsCostUsd),
+    notes: optionalTextValue(license.notes),
+  };
+}
+
+function textValue(value: unknown) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function optionalTextValue(value: unknown) {
+  return value === null || value === undefined ? null : String(value);
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function moneyValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  return Prisma.Decimal.isDecimal(value) ? value.toString() : String(value);
 }
 
 export function legacyAdminNames(value?: string | null) {

@@ -1,19 +1,21 @@
 import { LookupsManager } from "@/components/lookups-manager";
-import { PageHeader, Panel } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
+import { requirePagePermission } from "@/lib/page-auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function LookupsPage() {
-  const values = await prisma.lookupValue.findMany({ orderBy: [{ category: "asc" }, { sortOrder: "asc" }] });
+  await requirePagePermission("settings:write");
+  const values = await prisma.lookupValue.findMany({
+    orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+  });
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <PageHeader
         title="Lookups"
         description="Reference values that populate the status, service, branch, payment, and renewal dropdowns."
       />
-      <Panel>
-        <LookupsManager initialValues={values} />
-      </Panel>
+      <LookupsManager initialValues={values} />
     </div>
   );
 }

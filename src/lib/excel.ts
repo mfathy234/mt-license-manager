@@ -31,6 +31,36 @@ export type ParsedLookupValue = {
   sortOrder: number;
 };
 
+export type ImportResultSummary = {
+  imported: number;
+  skipped: number;
+  failed: number;
+};
+
+type ImportConfirmationResponse = {
+  batch: {
+    rowCount: number;
+  };
+};
+
+/**
+ * Confirm imports are transactional: the API returns the persisted batch's row
+ * count when every row is imported, rather than per-row result statuses.
+ */
+export function categorizeImportResults({
+  batch,
+}: ImportConfirmationResponse): ImportResultSummary {
+  return [
+    { outcome: "imported" as const, count: batch.rowCount },
+  ].reduce<ImportResultSummary>(
+    (summary, result) => ({
+      ...summary,
+      [result.outcome]: summary[result.outcome] + result.count,
+    }),
+    { imported: 0, skipped: 0, failed: 0 },
+  );
+}
+
 const aliases: Record<keyof Omit<ParsedLicenseRow, "rowNumber">, string[]> = {
   status: ["status"],
   serviceType: ["service type", "service"],
@@ -48,11 +78,21 @@ const aliases: Record<keyof Omit<ParsedLicenseRow, "rowNumber">, string[]> = {
   costUsd: ["usd", "cost usd", "price usd"],
   monthlyCostEgp: ["monthly egp", "monthly-egp", "monthly cost egp"],
   yearlyCostEgp: ["yearly egp", "yearly-egp", "yearly cost egp"],
-  fiveYearsCostEgp: ["5 years egp", "5 years-egp", "5 years cost egp", "five years egp"],
+  fiveYearsCostEgp: [
+    "5 years egp",
+    "5 years-egp",
+    "5 years cost egp",
+    "five years egp",
+  ],
   monthlyCostUsd: ["monthly usd", "monthly-usd", "monthly cost usd"],
   yearlyCostUsd: ["yearly usd", "yearly-usd", "yearly cost usd"],
-  fiveYearsCostUsd: ["5 years usd", "5 years-usd", "5 years cost usd", "five years usd"],
-  notes: ["notes", "note", "remarks"]
+  fiveYearsCostUsd: [
+    "5 years usd",
+    "5 years-usd",
+    "5 years cost usd",
+    "five years usd",
+  ],
+  notes: ["notes", "note", "remarks"],
 };
 
 function normalizeHeader(value: unknown) {
@@ -63,9 +103,14 @@ function normalizeHeader(value: unknown) {
     .trim();
 }
 
-function getValue(row: Record<string, unknown>, key: keyof Omit<ParsedLicenseRow, "rowNumber">) {
+function getValue(
+  row: Record<string, unknown>,
+  key: keyof Omit<ParsedLicenseRow, "rowNumber">,
+) {
   const options = aliases[key];
-  const entry = Object.entries(row).find(([header]) => options.includes(normalizeHeader(header)));
+  const entry = Object.entries(row).find(([header]) =>
+    options.includes(normalizeHeader(header)),
+  );
   return entry?.[1];
 }
 
@@ -75,7 +120,16 @@ export function normalizeExcelDate(value: unknown): Date | null {
   if (typeof value === "number") {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, Math.floor(parsed.S)));
+    return new Date(
+      Date.UTC(
+        parsed.y,
+        parsed.m - 1,
+        parsed.d,
+        parsed.H,
+        parsed.M,
+        Math.floor(parsed.S),
+      ),
+    );
   }
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
@@ -94,11 +148,15 @@ function asNumber(value: unknown) {
 
 export function parseLicenseWorkbook(buffer: Buffer): ParsedLicenseRow[] {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = workbook.SheetNames.find((name) => name.toLowerCase() === "license") ?? workbook.SheetNames[0];
+  const sheetName =
+    workbook.SheetNames.find((name) => name.toLowerCase() === "license") ??
+    workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
 
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: "",
+  });
   return rows
     .map((row, index): ParsedLicenseRow | null => {
       const details = asString(getValue(row, "details"));
@@ -126,7 +184,7 @@ export function parseLicenseWorkbook(buffer: Buffer): ParsedLicenseRow[] {
         yearlyCostUsd: asNumber(getValue(row, "yearlyCostUsd")),
         fiveYearsCostUsd: asNumber(getValue(row, "fiveYearsCostUsd")),
         notes: asString(getValue(row, "notes")),
-        rowNumber: index + 2
+        rowNumber: index + 2,
       };
     })
     .filter((row): row is ParsedLicenseRow => row !== null);
@@ -141,16 +199,23 @@ const lookupCategories: Record<string, string> = {
   "renewal frequency": "renewalFrequency",
   frequency: "renewalFrequency",
   "payment method": "paymentMethod",
-  payment: "paymentMethod"
+  payment: "paymentMethod",
 };
 
 export function parseLookupWorkbook(buffer: Buffer): ParsedLookupValue[] {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = workbook.SheetNames.find((name) => name.toLowerCase() === "lookups");
+  const sheetName = workbook.SheetNames.find(
+    (name) => name.toLowerCase() === "lookups",
+  );
   if (!sheetName) return [];
 
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, defval: "" });
-  const headers = (rows[0] ?? []).map((header) => lookupCategories[normalizeHeader(header)] ?? null);
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
+    header: 1,
+    defval: "",
+  });
+  const headers = (rows[0] ?? []).map(
+    (header) => lookupCategories[normalizeHeader(header)] ?? null,
+  );
   const values: ParsedLookupValue[] = [];
 
   for (const [rowIndex, row] of rows.slice(1).entries()) {
